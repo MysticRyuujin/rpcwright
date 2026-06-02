@@ -104,9 +104,10 @@ compile with `cannot use X (value of type ...) as *... value`.
 `geth` JS console supplies `latest` when the arg is omitted. Without it the
 console only works *by accident* — the JSON serializer sends `null` for a missing
 arg and the server happens to default that to latest — which geth reviewers will
-flag. (Core methods like `eth_getBalance` live in the base web3 lib, not
-`web3ext.go`; geth-specific methods such as `eth_getProof` / `eth_getStorageValues`
-are the ones defined there.)
+flag. (Core methods like `eth_getBalance` are defined in the bundled web3 lib
+`internal/jsre/deps/web3.js` — where they already use the default-block formatter
+— not in `web3ext.go`; only geth-specific extensions such as `eth_getProof` /
+`eth_getStorageValues` live in `web3ext.go`.)
 
 ## Test a parameter change through the REAL RPC server
 

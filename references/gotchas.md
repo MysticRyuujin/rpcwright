@@ -41,6 +41,14 @@ class — read them that way.
   enforces these rules (it will flag, e.g., a bug fix with no regression test)
   even after human reviewers approve. To fix a missing sign-off retroactively:
   `git rebase --signoff <base>` then force-push.
+- **But triage AI-reviewer *findings* skeptically** (distinct from the hard rules
+  above): bots (Copilot, claude-review, etc.) mix real issues with false positives
+  and over-engineering. Check each against the codebase's actual constraints and
+  existing patterns before acting — e.g. an "unbounded allocation / integer
+  overflow" finding is moot when the RPC server already caps request-body size,
+  and matching a sibling method's behavior (error class, validation order)
+  usually beats a one-off "improvement" that makes one method inconsistent. Apply
+  the genuinely correct ones; decline the rest with a brief rationale on the PR.
 
 ## 0c. A red CI check may be unrelated/flaky — confirm before chasing it
 

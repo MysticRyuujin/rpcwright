@@ -155,8 +155,26 @@ So the definition of done for a client change is **all three**:
 3. **hive `rpc-compat` is green** for the target tests.
 
 Do this *before* declaring done and *before* opening the PR — not after a reviewer
-or CI catches it. If the client already complies (e.g. Reth here), there's nothing
-to break, but still confirm rather than assume.
+or CI catches it. If the client already complies, confirm it (run the tests /
+hive) rather than assuming.
+
+### Pre-PR checklist (run top to bottom before opening any client PR)
+
+- [ ] Client **binary builds** from your branch (what hive runs).
+- [ ] `grep` the whole tree for **callers, overrides, and client-variant modules**
+      of any signature you changed; update each (gotcha #10b).
+- [ ] Client's **own tests compile and pass** for the modules you touched
+      (`go test ./...` / `./gradlew test` / `cargo test -p <crate>`) — and confirm
+      the command *actually ran*, not a toolchain no-op (gotcha #10a/#0c).
+- [ ] A **regression test hits the exact path you changed** (the *omitted* param,
+      the new method, the new error) — not a near-miss that passes the param
+      explicitly.
+- [ ] **hive `rpc-compat` is green** for the target tests, built from *your*
+      source (`dockerfile: local`/`git`), with `--sim.limit "rpc-compat/<test>"`.
+- [ ] Repo **CI gates** satisfied (gotcha #0b): conventional-commit title +
+      required scope, DCO sign-off, CHANGELOG, formatter (spotless/`cargo fmt`),
+      and any `AGENTS.md`/`CONTRIBUTING.md` rule (e.g. "bug fix needs a test").
+- [ ] Skim the repo's `.github/workflows/` so you know which checks will run.
 
 ## The gotchas that cost hours
 

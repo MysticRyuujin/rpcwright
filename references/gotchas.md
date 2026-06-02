@@ -47,8 +47,12 @@ class — read them that way.
   existing patterns before acting — e.g. an "unbounded allocation / integer
   overflow" finding is moot when the RPC server already caps request-body size,
   and matching a sibling method's behavior (error class, validation order)
-  usually beats a one-off "improvement" that makes one method inconsistent. Apply
-  the genuinely correct ones; decline the rest with a brief rationale on the PR.
+  usually beats a one-off "improvement" that makes one method inconsistent.
+  Critically, **match the reference client and the conformance fixture, not a
+  bot's idea of "nicer"** — e.g. a bot suggesting EIP-55-checksummed address keys
+  in a response is *wrong* when geth (the reference) and the `.io` fixture use
+  lowercase; following it would fail rpc-compat. Apply the genuinely correct
+  ones; decline the rest with a brief rationale on the PR.
 
 ## 0c. A red CI check may be unrelated/flaky — confirm before chasing it
 

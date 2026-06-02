@@ -70,13 +70,43 @@ from its siblings*.
   mirroring another client's local Dockerfile, or use `Dockerfile.git` with your
   fork/branch via `build_args: {github: <you/besu>, tag: <branch>}`.
 
-## Erigon — Go — GUIDANCE
+## Erigon — Go — VERIFIED
 
-- Handlers: the RPC daemon under `turbo/jsonrpc/` (e.g. `eth_call.go`,
-  `eth_account.go`). Same Go `rpc` package semantics as geth where shared —
-  expect the **pointer-for-optional-trailing-param** rule to apply.
-- Build: `make erigon` (and the `rpcdaemon` if RPC is separate).
-- hive: `clients/erigon/` — prefer `Dockerfile.local`/`Dockerfile.git`.
+- Handlers: `rpc/jsonrpc/` (note: **not** `turbo/jsonrpc/` — Erigon relocated the
+  RPC code). The state methods `GetBalance`, `GetTransactionCount`, `GetCode`,
+  `GetStorageAt`, `GetStorageValues` are in `rpc/jsonrpc/eth_accounts.go`;
+  `GetProof` is in `rpc/jsonrpc/eth_call.go`; the `EthAPI` **interface** is in
+  `rpc/jsonrpc/eth_api.go`.
+- Erigon vendors a near-identical copy of go-ethereum's `rpc` package
+  (`rpc/json.go`), so the **pointer-for-optional-trailing-param** rule is
+  identical: a value-type trailing `rpc.BlockNumberOrHash` is mandatory and an
+  omitted block returns `-32602 missing value for required argument N`. The fix
+  is the same as geth — change the param to `*rpc.BlockNumberOrHash` and default
+  `nil` to latest. Erigon already has a package var `latestNumOrHash =
+  rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)` in `eth_call.go` and
+  `Call` already uses the nil-default; add a small `orLatest(*rpc.BlockNumberOrHash)
+  rpc.BlockNumberOrHash` helper and resolve at the top of each handler.
+- **Gotcha specific to Erigon (unlike geth):** the `EthAPI` interface is consumed
+  by *internal Go callers* that pass value-type args, so flipping the signature
+  to a pointer breaks them and they must be updated too:
+  - `rpc/contracts/direct_backend.go` (the `bind` backend) — `CodeAt`,
+    `PendingCodeAt`, `PendingNonceAt`, `NonceAt`. These pass function-call results
+    (`BlockNumArg(...)`, `PendingBlockNumArg()`), so introduce a local and pass
+    its address.
+  - `rpc/mcp/mcp.go` and `rpc/mcp/resources.go` (the MCP server) — several calls;
+    `mcp.go` uses a local `blockNumOrHash` (just take `&blockNumOrHash`),
+    `resources.go` passes call results (introduce a local).
+  - Tests: `rpc/jsonrpc/eth_api_test.go`, `rpc/jsonrpc/corner_cases_support_test.go`.
+  Update the **interface** (`eth_api.go`) AND every implementation AND every
+  caller, or it won't compile. (geth had no such internal callers, so its change
+  was smaller.)
+- Build: `make erigon` (hive builds it with `BUILD_TAGS=nosqlite,noboltdb,nosilkworm`).
+- hive: `clients/erigon/` has `Dockerfile`, `Dockerfile.git`, `Dockerfile.local`.
+  **Use `Dockerfile.local`** (builder `golang:1-alpine`, copies
+  `clients/erigon/erigon/`): Erigon's `go.mod` tracks a recent Go (e.g. 1.25.x),
+  while `Dockerfile.git` pins an older `golang:1.24.1-alpine` and will fail the
+  build until that pin is bumped. Verified: all six default-block fixtures pass
+  on a locally-built Erigon with this fix.
 
 ## Reth — Rust — GUIDANCE
 

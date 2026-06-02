@@ -135,13 +135,14 @@ A condensed list. Full explanations in `references/gotchas.md`.
 - `references/execution-apis.md` — OpenRPC YAML, specgen/openrpc.json, speccheck, the `required` semantics.
 - `references/testgen.md` — rpctestgen, `make fill`, the `.io` format, local-client `go.mod` replace, determinism.
 - `references/hive.md` — rpc-compat architecture, local fixtures, building clients from source, client-files, the `--sim.limit` trap, reading results.
-- `references/clients.md` — per-client handler locations and local-build notes: go-ethereum & Nethermind (verified), Besu, Erigon, Reth, ethrex (guidance).
+- `references/clients.md` — per-client handler locations and local-build notes: go-ethereum, Nethermind & Erigon (verified), Besu, Reth, ethrex (guidance).
 - `references/gotchas.md` — the full gotcha catalog with explanations and fixes.
 - `references/worked-example.md` — a complete worked change ("default an omitted block param to latest") end to end, including a real cross-client bug found and fixed.
 
 ## Scope notes
 
-Verified end-to-end against **go-ethereum** and **Nethermind**. The other clients
-(Besu, Erigon, Reth, ethrex) have *guidance* pointers in `references/clients.md`
-— treat those as starting points to confirm, not gospel. The execution-apis and
-hive workflow is client-agnostic and applies to all of them.
+Verified end-to-end against **go-ethereum**, **Nethermind**, and **Erigon**. The
+remaining clients (Besu, Reth, ethrex) have *guidance* pointers in
+`references/clients.md` — treat those as starting points to confirm, not gospel.
+The execution-apis and hive workflow is client-agnostic and applies to all of
+them.

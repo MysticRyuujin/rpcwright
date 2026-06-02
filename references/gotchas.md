@@ -83,6 +83,20 @@ Each entry: the symptom, the cause, the fix.
 - **Fix:** the spec drives `speccheck` and documents the contract; to change what
   hive enforces you must (re)generate and ship `.io` fixtures.
 
+## 10b. Changing an RPC interface signature breaks internal Go callers
+
+- **Symptom:** after switching a method's param to a pointer (for wire
+  optionality), the client no longer compiles — errors far from the handler.
+- **Cause:** in some clients the RPC interface is consumed by *internal* Go code,
+  not just the JSON-RPC dispatcher. Erigon is the example: `rpc/jsonrpc`'s
+  `EthAPI` is called by `rpc/contracts/direct_backend.go` (the `bind` backend)
+  and `rpc/mcp/*` (the MCP server), all passing value-type args. (geth had no
+  such internal callers, so its change was smaller.)
+- **Fix:** update the interface declaration, every implementation, AND every
+  caller. For callers that pass a function-call result you can't take the address
+  of directly — introduce a local: `bnh := f(); api.Method(ctx, x, &bnh)`. Grep
+  the whole tree for callers before assuming the change is local.
+
 ## 10. Cross-client divergence read as your bug
 
 - **Symptom:** your client passes a fixture; another client fails it.

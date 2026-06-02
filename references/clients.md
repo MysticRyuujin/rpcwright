@@ -12,8 +12,6 @@ source where the client's `Dockerfile.local` expects it (`clients/<name>/<name>/
 and select `dockerfile: local`, OR build from a fork branch with
 `dockerfile: git` + `build_args: {github, tag}` (see `hive.md`).
 
-All six sections below are **Verified** (exercised end-to-end).
-
 ## Per-client cheat sheet
 
 | Client | Lang | RPC handlers | How a method is registered/exposed | Optional-param idiom | Build / run tests |
@@ -63,7 +61,7 @@ These are enforced by CI and/or reviewers — get them right *before* pushing:
 > The exact rules drift — when a title/format check fails, read the failing
 > workflow under the client's `.github/workflows/` rather than guessing.
 
-## go-ethereum — Go — VERIFIED
+## go-ethereum — Go
 
 - Handlers: `internal/ethapi/api.go` (backend: `internal/ethapi/backend.go`,
   `eth/api_backend.go`).
@@ -74,7 +72,7 @@ These are enforced by CI and/or reviewers — get them right *before* pushing:
   `clients/go-ethereum/go-ethereum/` and runs `make geth`. It caches `go.mod`/
   `go.sum` in a separate layer, so dependency downloads are reused across builds.
 
-## Nethermind — C# / .NET — VERIFIED
+## Nethermind — C# / .NET
 
 - Handlers: `src/Nethermind/Nethermind.JsonRpc/Modules/Eth/EthRpcModule.cs`
   (implementation) and `IEthRpcModule.cs` (interface + `[JsonRpcMethod]`
@@ -89,9 +87,9 @@ These are enforced by CI and/or reviewers — get them right *before* pushing:
 - hive local build: `clients/nethermind/Dockerfile.local` copies
   `clients/nethermind/nethermind/` and runs the dotnet build.
 
-### Real cross-client bug found via this workflow
+### Example: a single-method divergence
 
-Nethermind defaulted an omitted block to `latest` for `eth_getBalance`,
+A useful pattern — Nethermind defaulted an omitted block to `latest` for `eth_getBalance`,
 `eth_getCode`, `eth_getStorageAt`, `eth_getTransactionCount`, `eth_getProof`
 (all declared `BlockParameter? ... = null`) — but **not** for
 `eth_getStorageValues`, which declared `BlockParameter blockParameter`
@@ -111,7 +109,7 @@ Pattern worth remembering: when one client fails a single fixture in a family
 that otherwise passes, look for the *one method whose param declaration differs
 from its siblings*.
 
-## Besu — Java — VERIFIED
+## Besu — Java
 
 - Handlers: one class per method under
   `ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/`
@@ -153,10 +151,9 @@ from its siblings*.
   switch the builder to a JDK-25 base (e.g. `eclipse-temurin:25-jdk`, runtime
   `eclipse-temurin:25-jre`). The Gradle build is the slow part (tens of minutes).
   Note the source repo moved org: upstream is now `besu-eth/besu`, though hive's
-  prebuilt `Dockerfile` still pulls `hyperledger/besu:develop`. Verified: all six
-  default-block fixtures pass on a Besu built from a fork with this fix.
+  prebuilt `Dockerfile` still pulls `hyperledger/besu:develop`.
 
-## Erigon — Go — VERIFIED
+## Erigon — Go
 
 - Handlers: `rpc/jsonrpc/` (note: **not** `turbo/jsonrpc/` — Erigon relocated the
   RPC code). The state methods `GetBalance`, `GetTransactionCount`, `GetCode`,
@@ -191,36 +188,27 @@ from its siblings*.
   **Use `Dockerfile.local`** (builder `golang:1-alpine`, copies
   `clients/erigon/erigon/`): Erigon's `go.mod` tracks a recent Go (e.g. 1.25.x),
   while `Dockerfile.git` pins an older `golang:1.24.1-alpine` and will fail the
-  build until that pin is bumped. Verified: all six default-block fixtures pass
-  on a locally-built Erigon with this fix.
+  build until that pin is bumped.
 
-## Reth — Rust — VERIFIED (already compliant, no change needed)
+## Reth — Rust
 
-- **Reth already defaults an omitted block to latest on all six state methods**,
-  so the stock `ghcr.io/paradigmxyz/reth:latest` image passes all six
-  default-block fixtures with no source change. (Confirms the #812 note that reth
-  already defaults to latest.)
-- Why it's already correct: the `EthApiServer` trait in
-  `crates/rpc/rpc-eth-api/src/core.rs` declares the block parameter as
-  `block_number: Option<BlockId>` on every state method — `balance`,
-  `get_code`, `storage_at`, `transaction_count`, `get_proof`, and
-  `storage_values` (`eth_getStorageValues`, which reth *does* implement). reth's
-  RPC framework (jsonrpsee) treats a trailing `Option<T>` as optional, so an
-  omitted parameter arrives as `None`.
-- `None` is resolved to latest in `crates/rpc/rpc-eth-api/src/helpers/state.rs`
-  via `block_id.unwrap_or_default()` and `state_at_block_id_or_latest`
-  ("interprets `None` as `BlockId::Number(BlockNumberOrTag::Latest)`");
-  `BlockId::default()` is latest. This is the idiomatic Rust equivalent of geth's
-  pointer-default and Besu's `getOptionalParameter(...).orElse(LATEST)`.
-- If a future Rust client got this *wrong* (e.g. a required `BlockId` with no
-  `Option`), the fix would be to make the trait parameter `Option<BlockId>` and
-  `unwrap_or_default()` / default to `BlockNumberOrTag::Latest` — and then run the
-  crate's tests (`cargo test -p reth-rpc-eth-api`), since trait-signature changes
-  ripple to implementors and tests.
-- Build: `cargo build --release --bin reth`. hive: `clients/reth/`
-  (`Dockerfile`/`Dockerfile.git`/`Dockerfile.local`). No fix → no PR.
+- Handlers: the `EthApiServer` trait in `crates/rpc/rpc-eth-api/src/core.rs`;
+  logic lives in helper traits under `crates/rpc/rpc-eth-api/src/helpers/`. A new
+  method is `#[method(name = "...")]` on the trait plus an impl — jsonrpsee
+  auto-registers it (`into_rpc()`), no manual wiring.
+- Optional param idiom: a trailing `Option<T>` (e.g. `block_number:
+  Option<BlockId>`). jsonrpsee treats a trailing `Option` as optional, so an
+  omitted argument arrives as `None`, which resolves to latest via
+  `block_id.unwrap_or_default()` / `state_at_block_id_or_latest` in
+  `helpers/state.rs` (`BlockId::default()` is latest) — the Rust equivalent of
+  geth's pointer-default and Besu's `getOptionalParameter(...).orElse(LATEST)`.
+  A *required* `BlockId` is made optional by switching it to `Option<BlockId>`
+  and defaulting `None` to latest.
+- Build: `cargo build --release --bin reth`. Tests: `cargo test -p
+  reth-rpc-eth-api` (trait-signature changes ripple to impls and tests).
+- hive: `clients/reth/` (`Dockerfile`/`Dockerfile.git`/`Dockerfile.local`).
 
-## ethrex — Rust — VERIFIED
+## ethrex — Rust
 
 - Handlers: `crates/networking/rpc/eth/account.rs` — one struct + `RpcHandler`
   impl per method (`GetBalanceRequest`, `GetCodeRequest`, `GetStorageAtRequest`,
@@ -254,18 +242,12 @@ from its siblings*.
   `Dockerfile.local`). Build from a fork via `build_args: {github: <you/ethrex>,
   tag: <branch>}`; the `Dockerfile.git` `rust:latest` builder + ethrex's
   `rust-toolchain.toml` auto-fetches the pinned toolchain.
-- **Verification caveat (good example of gotcha #10a, value-fixtures angle):** the
-  default-latest *behavior* is verified — the new parse-layer unit tests prove
-  omitted→latest, and against hive the omitted-block request returns the *same*
-  response as an explicit `"latest"` request. But ethrex does **not** pass the
-  rpc-compat *value* fixtures for these methods on the hive default chain — and
-  that's **pre-existing and unrelated**: a *stock* ethrex returns the same results
-  for explicit `"latest"` (e.g. `eth_getBalance(addr,"latest")` → `0x0` where other
-  clients return the funded balance), so it's an ethrex/hive default-chain
-  state-serving issue, out of scope for a spec PR. Lesson: when a client fails the
-  hardcoded fixture *value*, check whether it also fails with an explicit block —
-  if so, your change isn't the cause; prove your change via omitted==explicit
-  equivalence + a client unit test instead of the fixture value.
+- Caveat: ethrex's hive default-chain state-serving has gaps — a stock ethrex can
+  return `0x0`/`null` for account state at `latest`, so rpc-compat *value*
+  fixtures for the state methods may fail independent of any spec change. Apply
+  gotcha #0c: check whether the client fails the same call with an *explicit*
+  block before blaming your change, and prove the change via the client's unit
+  tests + omitted==explicit-block equivalence rather than the fixture value.
 
 ## General per-client checklist for any change
 

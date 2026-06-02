@@ -98,6 +98,14 @@ Each entry: the symptom, the cause, the fix.
   behavior. Definition of done = binary builds + client tests pass + hive green.
   (Real cases: Erigon's `rpc/contracts` + `rpc/mcp` callers and test files;
   Besu's `EthGetProofTest.errorWhenNoBlockNumberSupplied`.)
+- **Sub-gotcha — confirm the command actually RAN.** A build/test command can
+  exit 0 without doing anything. Real case: ethrex pins Rust via
+  `rust-toolchain.toml` while its `.tool-versions` named an uninstalled version;
+  under **asdf**, `cargo check`/`cargo test` printed `No version is set for
+  command cargo` and **exited 0 without compiling** — a false "pass". Always look
+  for the real signal (`Compiling …`, `test result: ok. N passed`) and verify the
+  toolchain runs (`cargo --version` / `go version`) before trusting a green exit
+  code. Here: `ASDF_RUST_VERSION=1.91.0 cargo test -p ethrex-rpc --lib`.
 
 ## 10b. Changing an RPC interface signature breaks internal Go callers
 

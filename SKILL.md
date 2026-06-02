@@ -172,14 +172,15 @@ A condensed list. Full explanations in `references/gotchas.md`.
 - `references/execution-apis.md` — OpenRPC YAML, specgen/openrpc.json, speccheck, the `required` semantics.
 - `references/testgen.md` — rpctestgen, `make fill`, the `.io` format, local-client `go.mod` replace, determinism.
 - `references/hive.md` — rpc-compat architecture, local fixtures, building clients from source, client-files, the `--sim.limit` trap, reading results.
-- `references/clients.md` — per-client handler locations and local-build notes: go-ethereum, Nethermind, Erigon, Besu & Reth (verified), ethrex (guidance).
+- `references/clients.md` — per-client handler locations and local-build notes: go-ethereum, Nethermind, Erigon, Besu, Reth & ethrex (all verified).
 - `references/gotchas.md` — the full gotcha catalog with explanations and fixes.
 - `references/worked-example.md` — a complete worked change ("default an omitted block param to latest") end to end, including a real cross-client bug found and fixed.
 
 ## Scope notes
 
-Verified end-to-end against **go-ethereum**, **Nethermind**, **Erigon**, **Besu**
-(Go and Java RPC stacks), and **Reth** (Rust — already compliant, no change
-needed). Only **ethrex** remains *guidance* in `references/clients.md` — treat it
-as a starting point to confirm, not gospel. The execution-apis and hive workflow
-is client-agnostic and applies to all of them.
+Verified end-to-end against **all six** major execution-layer clients —
+**go-ethereum**, **Nethermind**, **Erigon**, **Besu**, **Reth**, and **ethrex**
+(Go, Java, and Rust RPC stacks). Reth was already compliant; the rest needed the
+default-to-latest change (and ethrex additionally needed `eth_getStorageValues`
+implemented). Per-client specifics and the exact fixes are in
+`references/clients.md`. The execution-apis and hive workflow is client-agnostic.

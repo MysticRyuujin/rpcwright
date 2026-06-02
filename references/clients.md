@@ -166,12 +166,42 @@ from its siblings*.
 - Build: `cargo build --release --bin reth`. hive: `clients/reth/`
   (`Dockerfile`/`Dockerfile.git`/`Dockerfile.local`). No fix → no PR.
 
-## ethrex — Rust — GUIDANCE
+## ethrex — Rust — VERIFIED
 
-- Handlers: RPC under `crates/networking/rpc/` (eth namespace modules). Same
-  `Option<...>` + default-to-latest idiom as other Rust clients.
-- Build: `cargo build --release`.
-- hive: `clients/ethrex/` — use `Dockerfile.git`/`Dockerfile.local`.
+- Handlers: `crates/networking/rpc/eth/account.rs` — one struct + `RpcHandler`
+  impl per method (`GetBalanceRequest`, `GetCodeRequest`, `GetStorageAtRequest`,
+  `GetTransactionCountRequest`, `GetProofRequest`). Method dispatch is a
+  `match` on the method name in `crates/networking/rpc/rpc.rs`
+  (`"eth_getBalance" => GetBalanceRequest::call(...)`).
+- **Unlike reth, ethrex does NOT auto-handle optional trailing params.** Each
+  `parse` does a strict `if params.len() != N { return Err(BadParams("Expected N
+  params")) }` and then `BlockIdentifierOrHash::parse(params[idx], idx)`, so
+  omitting the block returned `-32000 "Expected N params"`. Fix: relax the check
+  to accept `N-1` or `N`, and parse the block as
+  `params.get(idx).map(|b| BlockIdentifierOrHash::parse(b.clone(), idx)).transpose()?.unwrap_or_default()`.
+  Add `impl Default for BlockIdentifierOrHash` returning latest —
+  `BlockTag` already derives `#[default] Latest` and `BlockIdentifier` had a
+  `Default`, but `BlockIdentifierOrHash` did not.
+- **ethrex did not implement `eth_getStorageValues`** (returned `-32601 method
+  not found`). It's small to add (~45 LOC): a `GetStorageValuesRequest` that
+  batches `get_storage_at` over a `map<address, slots>` at a block, with the same
+  optional-block default and a 1024-slot cap; register it in the `rpc.rs` match.
+- Build/test: cargo workspace; the RPC crate is `ethrex-rpc`. Run
+  `cargo test -p ethrex-rpc --lib`.
+- **Toolchain gotcha (cost me a false "pass"):** ethrex pins Rust via
+  `rust-toolchain.toml` (e.g. channel `1.91.0`) and ships a `.tool-versions` that
+  may pin a *different / not-installed* version. If your shell uses **asdf**,
+  `cargo` can print `No version is set for command cargo` and **exit 0 without
+  running** — a silent no-op that looks exactly like a passing build. Always
+  confirm cargo actually ran (`cargo --version` prints a version); override with
+  e.g. `ASDF_RUST_VERSION=1.91.0 cargo ...`. (See gotcha #10a — confirm your
+  command actually executed.)
+- hive: `clients/ethrex/` has `Dockerfile` and `Dockerfile.git` (no
+  `Dockerfile.local`). Build from a fork via `build_args: {github: <you/ethrex>,
+  tag: <branch>}`; the `Dockerfile.git` `rust:latest` builder + ethrex's
+  `rust-toolchain.toml` auto-fetches the pinned toolchain. Verified: all six
+  default-block fixtures pass on a from-fork build (including the newly-added
+  `eth_getStorageValues`).
 
 ## General per-client checklist for an optional-param change
 

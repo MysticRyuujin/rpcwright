@@ -83,6 +83,22 @@ Each entry: the symptom, the cause, the fix.
 - **Fix:** the spec drives `speccheck` and documents the contract; to change what
   hive enforces you must (re)generate and ship `.io` fixtures.
 
+## 10a. "hive is green" is not "done" — the client's own tests still run in CI
+
+- **Symptom:** you declare the change done after a green hive run, then the PR's CI
+  fails to compile or fails unit tests — or a reviewer points out broken tests.
+- **Cause:** hive builds only the client *binary* and exercises runtime behavior
+  over JSON-RPC. It never compiles or runs the client's own test suite. A
+  signature/behavior change commonly breaks (a) internal callers and test callers
+  that don't even compile (the hive binary build may not touch them), and (b)
+  tests asserting the *previous* behavior.
+- **Fix:** before declaring done / opening a PR, also build and run the client's
+  own tests for the packages you touched (`go test ./...`, `./gradlew test`,
+  `cargo test -p <crate>`), and grep for callers AND for tests asserting the old
+  behavior. Definition of done = binary builds + client tests pass + hive green.
+  (Real cases: Erigon's `rpc/contracts` + `rpc/mcp` callers and test files;
+  Besu's `EthGetProofTest.errorWhenNoBlockNumberSupplied`.)
+
 ## 10b. Changing an RPC interface signature breaks internal Go callers
 
 - **Symptom:** after switching a method's param to a pointer (for wire

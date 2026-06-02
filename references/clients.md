@@ -140,14 +140,31 @@ from its siblings*.
   build until that pin is bumped. Verified: all six default-block fixtures pass
   on a locally-built Erigon with this fix.
 
-## Reth — Rust — GUIDANCE
+## Reth — Rust — VERIFIED (already compliant, no change needed)
 
-- Handlers: `crates/rpc/` — particularly `rpc-eth-api` (the `EthApi` trait) and
-  `rpc-eth-types`. Optionality is expressed with `Option<BlockId>` parameters;
-  default to `BlockId::latest()` (or `BlockNumberOrTag::Latest`) when `None`.
-- Build: `cargo build --release --bin reth`.
-- hive: `clients/reth/` — `Dockerfile.git` against your fork/branch is usually
-  the path of least resistance for Rust clients.
+- **Reth already defaults an omitted block to latest on all six state methods**,
+  so the stock `ghcr.io/paradigmxyz/reth:latest` image passes all six
+  default-block fixtures with no source change. (Confirms the #812 note that reth
+  already defaults to latest.)
+- Why it's already correct: the `EthApiServer` trait in
+  `crates/rpc/rpc-eth-api/src/core.rs` declares the block parameter as
+  `block_number: Option<BlockId>` on every state method — `balance`,
+  `get_code`, `storage_at`, `transaction_count`, `get_proof`, and
+  `storage_values` (`eth_getStorageValues`, which reth *does* implement). reth's
+  RPC framework (jsonrpsee) treats a trailing `Option<T>` as optional, so an
+  omitted parameter arrives as `None`.
+- `None` is resolved to latest in `crates/rpc/rpc-eth-api/src/helpers/state.rs`
+  via `block_id.unwrap_or_default()` and `state_at_block_id_or_latest`
+  ("interprets `None` as `BlockId::Number(BlockNumberOrTag::Latest)`");
+  `BlockId::default()` is latest. This is the idiomatic Rust equivalent of geth's
+  pointer-default and Besu's `getOptionalParameter(...).orElse(LATEST)`.
+- If a future Rust client got this *wrong* (e.g. a required `BlockId` with no
+  `Option`), the fix would be to make the trait parameter `Option<BlockId>` and
+  `unwrap_or_default()` / default to `BlockNumberOrTag::Latest` — and then run the
+  crate's tests (`cargo test -p reth-rpc-eth-api`), since trait-signature changes
+  ripple to implementors and tests.
+- Build: `cargo build --release --bin reth`. hive: `clients/reth/`
+  (`Dockerfile`/`Dockerfile.git`/`Dockerfile.local`). No fix → no PR.
 
 ## ethrex — Rust — GUIDANCE
 

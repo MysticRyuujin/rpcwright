@@ -89,9 +89,42 @@ detail and the traps.
    with a negative test. → `references/execution-apis.md`
 6. **Run hive rpc-compat** with your client built from local source, using a
    client-file and the correct `--sim.limit` form. Assert `failed=0`. → `references/hive.md`
-7. **Cross-client**: add other clients; investigate any failure — it may be that
+7. **Run the changed client's own test suite** and fix what your change broke —
+   then it's done. See "Definition of done" below. → `references/clients.md`
+8. **Cross-client**: add other clients; investigate any failure — it may be that
    client's bug, which you can patch locally to prove and then report upstream.
    → `references/clients.md`
+
+## Definition of done (read before you say "done" or open a PR)
+
+**A green hive run does NOT mean the change is done.** hive only exercises runtime
+behavior over JSON-RPC. It never compiles or runs the *client's own* unit/
+integration test suite — but the PR's CI will, and it will fail if you left
+anything broken. A behavior or signature change routinely breaks the client's own
+tests in ways hive can't see:
+
+- **Compile breaks from a signature change.** Making a param optional often means
+  changing a type (Go value→pointer, a trait/interface signature). That ripples to
+  *internal callers* and *test callers* that the binary build for hive may not even
+  compile. (Erigon: changing `EthAPI` to `*rpc.BlockNumberOrHash` broke
+  `rpc/contracts` and `rpc/mcp` callers plus several test files — none of which the
+  hive `make erigon` binary build touches.)
+- **Tests asserting the OLD behavior.** A test that asserted "omitting the block
+  errors" will now fail because it returns latest. (Besu: `EthGetProofTest`'s
+  `errorWhenNoBlockNumberSupplied` had to become a "defaults to latest" test.)
+
+So the definition of done for a client change is **all three**:
+
+1. The client **binary builds** (what hive needs), AND
+2. The client's **own test suite compiles and passes** — at minimum the packages/
+   modules you touched: `go test ./...` for the changed Go packages,
+   `./gradlew test` / the affected `*Test.java`, `cargo test -p <crate>`, etc.
+   Grep for callers AND for tests asserting the prior behavior; fix both.
+3. **hive `rpc-compat` is green** for the target tests.
+
+Do this *before* declaring done and *before* opening the PR — not after a reviewer
+or CI catches it. If the client already complies (e.g. Reth here), there's nothing
+to break, but still confirm rather than assume.
 
 ## The gotchas that cost hours
 
@@ -128,6 +161,10 @@ A condensed list. Full explanations in `references/gotchas.md`.
 - **hive defaults to the official prebuilt client image.** To test *your* change
   you must build the client from local source (`dockerfile: local`) — otherwise
   the harness silently tests upstream, not you.
+- **A green hive run is not "done".** hive never compiles or runs the client's own
+  test suite, but the PR's CI does. Signature/behavior changes break internal
+  callers and tests asserting the old behavior. Run the client's tests before
+  declaring done — see "Definition of done" above.
 
 ## Reference files
 
@@ -135,14 +172,14 @@ A condensed list. Full explanations in `references/gotchas.md`.
 - `references/execution-apis.md` — OpenRPC YAML, specgen/openrpc.json, speccheck, the `required` semantics.
 - `references/testgen.md` — rpctestgen, `make fill`, the `.io` format, local-client `go.mod` replace, determinism.
 - `references/hive.md` — rpc-compat architecture, local fixtures, building clients from source, client-files, the `--sim.limit` trap, reading results.
-- `references/clients.md` — per-client handler locations and local-build notes: go-ethereum, Nethermind, Erigon & Besu (verified), Reth, ethrex (guidance).
+- `references/clients.md` — per-client handler locations and local-build notes: go-ethereum, Nethermind, Erigon, Besu & Reth (verified), ethrex (guidance).
 - `references/gotchas.md` — the full gotcha catalog with explanations and fixes.
 - `references/worked-example.md` — a complete worked change ("default an omitted block param to latest") end to end, including a real cross-client bug found and fixed.
 
 ## Scope notes
 
-Verified end-to-end against **go-ethereum**, **Nethermind**, **Erigon**, and
-**Besu** (covering Go and Java RPC stacks). The remaining clients (Reth, ethrex)
-have *guidance* pointers in `references/clients.md` — treat those as starting
-points to confirm, not gospel. The execution-apis and hive workflow is
-client-agnostic and applies to all of them.
+Verified end-to-end against **go-ethereum**, **Nethermind**, **Erigon**, **Besu**
+(Go and Java RPC stacks), and **Reth** (Rust — already compliant, no change
+needed). Only **ethrex** remains *guidance* in `references/clients.md` — treat it
+as a starting point to confirm, not gospel. The execution-apis and hive workflow
+is client-agnostic and applies to all of them.

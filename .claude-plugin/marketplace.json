@@ -1,0 +1,22 @@
+{
+  "name": "rpcwright",
+  "owner": {
+    "name": "MysticRyuujin",
+    "url": "https://github.com/MysticRyuujin"
+  },
+  "metadata": {
+    "description": "Ethereum JSON-RPC standards engineering skill.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "rpcwright",
+      "source": "./",
+      "version": "1.0.0",
+      "description": "Engineer and conformance-test Ethereum JSON-RPC (execution-apis) changes across EL clients.",
+      "author": {
+        "name": "MysticRyuujin"
+      }
+    }
+  ]
+}

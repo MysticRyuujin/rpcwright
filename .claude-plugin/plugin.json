@@ -1,0 +1,23 @@
+{
+  "name": "rpcwright",
+  "version": "1.0.0",
+  "description": "Engineer and conformance-test Ethereum JSON-RPC (execution-apis) changes across execution-layer clients — go-ethereum, Nethermind, Erigon, Besu, Reth, ethrex.",
+  "author": {
+    "name": "MysticRyuujin",
+    "url": "https://github.com/MysticRyuujin"
+  },
+  "homepage": "https://github.com/MysticRyuujin/rpcwright",
+  "repository": "https://github.com/MysticRyuujin/rpcwright",
+  "license": "MIT",
+  "keywords": [
+    "ethereum",
+    "json-rpc",
+    "execution-apis",
+    "openrpc",
+    "go-ethereum",
+    "hive",
+    "rpctestgen",
+    "speccheck",
+    "conformance-testing"
+  ]
+}

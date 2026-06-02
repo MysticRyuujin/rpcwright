@@ -43,7 +43,16 @@ rediscover them the slow way.
   change end to end (default an omitted block param to `latest`), including a
   real cross-client bug found and fixed.
 
-## Install (Claude Code / Claude Agent)
+## Install
+
+### Claude Code plugin (no clone)
+
+```text
+/plugin marketplace add MysticRyuujin/rpcwright
+/plugin install rpcwright@rpcwright
+```
+
+### Manual (personal skill)
 
 Personal skills live under `~/.claude/skills/`. Clone into place:
 
@@ -61,6 +70,8 @@ ln -s "$PWD/rpcwright" ~/.claude/skills/rpcwright
 Claude discovers the skill from its `SKILL.md` frontmatter and loads it when a
 task involves the Ethereum JSON-RPC API, execution-apis, rpctestgen/testgen,
 `.io` fixtures, `speccheck`, `openrpc.json`, or hive `rpc-compat`.
+`AGENTS.md`, `CLAUDE.md`, and `llms.txt` are symlinks to `SKILL.md` so other
+agent tooling discovers the same content.
 
 ## Scope
 

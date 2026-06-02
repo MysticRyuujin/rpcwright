@@ -98,6 +98,16 @@ When you flip a signature from value to pointer, fix any in-repo callers and the
 backend mock in tests (e.g. `internal/ethapi/api_test.go`) — they'll fail to
 compile with `cannot use X (value of type ...) as *... value`.
 
+**Also update the console binding.** If the method has a `web3ext` entry
+(`internal/web3ext/web3ext.go`), an optional block param should use
+`inputDefaultBlockNumberFormatter` (not `inputBlockNumberFormatter`) so the
+`geth` JS console supplies `latest` when the arg is omitted. Without it the
+console only works *by accident* — the JSON serializer sends `null` for a missing
+arg and the server happens to default that to latest — which geth reviewers will
+flag. (Core methods like `eth_getBalance` live in the base web3 lib, not
+`web3ext.go`; geth-specific methods such as `eth_getProof` / `eth_getStorageValues`
+are the ones defined there.)
+
 ## Test a parameter change through the REAL RPC server
 
 Calling the Go method directly does **not** prove the JSON-RPC layer accepts an

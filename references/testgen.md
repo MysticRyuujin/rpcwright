@@ -114,6 +114,31 @@ trust `go build`):
 cd $EXECapis/tools && go build ./testgen/ && gofmt -w testgen/generators.go && go vet ./testgen/
 ```
 
+## Adding a NEW method's tests from scratch
+
+For a brand-new method (not just a case on an existing one):
+
+1. Declare a new `MethodTests` var in `generators.go`:
+   ```go
+   var EthGetThing = MethodTests{
+       "eth_getThing",
+       []Test{{
+           Name:  "get-thing",
+           About: "returns the thing for an account",
+           Run: func(ctx context.Context, t *T) error { /* ... */ return nil },
+       }},
+   }
+   ```
+2. **Register it in the `AllMethods` slice** (top of `generators.go`:
+   `var AllMethods = []MethodTests{ EthBlockNumber, … }`). rpctestgen only
+   discovers methods listed there — omit this and your tests silently never run
+   and `tests/<method>/` is never created.
+3. `make fill` then creates `tests/eth_getThing/<case>.io` automatically — the
+   `--out` dir + the method name + each `Test.Name`. No `mkdir` needed; the
+   `About` text becomes the `.io` comment header (hive's test description).
+4. Set `SpecOnly: true` on a `Test` when the result isn't deterministic — hive
+   then checks the response *structure* only, not the exact recorded value.
+
 ## The .io fixture format
 
 ```

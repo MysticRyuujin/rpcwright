@@ -16,10 +16,17 @@ description: >-
 # rpcwright — Ethereum JSON-RPC standards engineering
 
 A field guide for making and proving a change to the Ethereum execution-layer
-JSON-RPC API. The hard part is never the one-line behavior change — it is the
-four repos that must agree (the client, the spec, the test generator, the
+JSON-RPC API — adding a new method, adding or modifying a parameter, changing a
+result shape or error behavior, deprecating a method, or anything else in the
+execution-apis (OpenRPC) spec. The hard part is rarely the change itself — it is
+the four repos that must agree (the client, the spec, the test generator, the
 cross-client harness) and the dozen places a silent failure hides. This skill
 encodes the exact commands and the gotchas.
+
+Throughout, **"default an omitted block param to latest"** (execution-apis
+[#812](https://github.com/ethereum/execution-apis/pull/812)) is used as a
+concrete running example — but the workflow is identical for any change. The full
+narrative of that example lives in `references/worked-example.md`.
 
 > Conventions in this skill: paths are generic. Set these once and the snippets
 > below copy-paste cleanly. Adjust to wherever you cloned each repo.
@@ -95,6 +102,27 @@ detail and the traps.
    client's bug, which you can patch locally to prove and then report upstream.
    → `references/clients.md`
 
+## What to touch, by change type
+
+Every JSON-RPC change is a combination of the same touchpoints. Find your row,
+then use the reference files for each cell. Default-to-latest (making a param
+optional) is just one row — the running example.
+
+| Change type | Client: behavior | Client: register? | Spec `src/*.yaml` | Spec schemas | testgen | speccheck angle | hive |
+|---|---|---|---|---|---|---|---|
+| **New method** | new handler | **yes** (see clients.md) | new method object | add new types if any | new `MethodTests` var + add to `AllMethods`; new `tests/<m>/` | validates params + result schema | replays new fixtures |
+| **Add optional param** | read it, default when absent | no | add param `required:false` (+`description`) | if new type | a case with it and without it | enforces `required` | exact-match |
+| **Make required param optional** (default-to-latest) | default when omitted | no | flip `required:false` + default | no | an omitted-param case | enforces `required` | exact-match |
+| **Change result shape/fields** | build new result | no | edit `result` schema | maybe edit/add | regen (output changes) | result-schema validation | exact-match, every field |
+| **Change error code/behavior** | return new error | no | `errors`/error-groups if speced | no | a case with `invalid` in its name (skips result-schema check) | skips error bodies | errors compared only when BOTH sides error |
+| **Deprecate / remove** | remove/guard handler | unregister | remove method | no | remove cases + `tests/<m>/` | — | — |
+
+**Registration is per-client.** Most clients auto-expose a method once it's on the
+RPC surface (geth reflection on the API struct; Nethermind interface +
+`[JsonRpcMethod]`; reth/Erigon trait/interface). **Besu and ethrex need an explicit
+entry** (Besu: `RpcMethod` enum + the methods factory; ethrex: the `rpc.rs` match
+arm). Details and exact files per client in `references/clients.md`.
+
 ## Definition of done (read before you say "done" or open a PR)
 
 **A green hive run does NOT mean the change is done.** hive only exercises runtime
@@ -130,11 +158,12 @@ to break, but still confirm rather than assume.
 
 A condensed list. Full explanations in `references/gotchas.md`.
 
-- **Optional trailing RPC param must be a pointer (go-ethereum).** The geth `rpc`
-  package only lets a caller omit a *trailing* argument if its Go type is a
-  pointer. A value-type trailing arg is mandatory → `missing value for required
-  argument N`. To make a block param optional: `*rpc.BlockNumberOrHash`, default
-  `nil` → latest.
+- **Know each client's optionality idiom** (example of a broader class — every
+  change must match how a client expresses params/results). For an *optional
+  param*: go-ethereum needs a *pointer* trailing arg (a value type is mandatory →
+  `missing value for required argument N`); reth uses `Option<T>`; Nethermind a
+  nullable `T? = null`; Besu `getOptionalParameter`; ethrex a manual `params.len()`
+  check. Full per-client table in `references/clients.md`.
 - **`--sim.limit` needs the suite prefix.** It is `<suite>/<test>`. A bare string
   is the *suite* pattern. The suite is gated first, so `--sim.limit "my-test"`
   matches no suite and silently runs **0 tests** (a false green). Use
@@ -178,9 +207,12 @@ A condensed list. Full explanations in `references/gotchas.md`.
 
 ## Scope notes
 
-Verified end-to-end against **all six** major execution-layer clients —
-**go-ethereum**, **Nethermind**, **Erigon**, **Besu**, **Reth**, and **ethrex**
-(Go, Java, and Rust RPC stacks). Reth was already compliant; the rest needed the
-default-to-latest change (and ethrex additionally needed `eth_getStorageValues`
-implemented). Per-client specifics and the exact fixes are in
-`references/clients.md`. The execution-apis and hive workflow is client-agnostic.
+This workflow is client-agnostic and applies to any JSON-RPC change. The
+per-client reference (`references/clients.md`) gives, for each of **go-ethereum,
+Nethermind, Erigon, Besu, Reth, and ethrex**: where RPC handlers live, how a
+method is registered/exposed, how params and results are typed, how to build and
+run its tests, and its CI gates (formatting, sign-off, changelog) — the reusable
+knowledge for *any* change, not just this one. The default-to-latest example was
+carried end-to-end through all six (Go, Java, and Rust stacks); one of them
+(ethrex) also needed a brand-new method (`eth_getStorageValues`) implemented,
+which exercises the add-a-method path too.

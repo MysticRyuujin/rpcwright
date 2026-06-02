@@ -1,13 +1,67 @@
-# Per-client notes: handler locations and local builds
+# Per-client notes: handlers, registration, builds, and PR conventions
 
 The execution-apis + hive workflow is client-agnostic. What differs per client is
-(a) where the RPC handlers live, (b) how to build it, and (c) how hive builds it
-from local source. For hive, the pattern is always the same: drop your modified
-source at `clients/<name>/<name>/` and select `dockerfile: local` in a
-client-file (see `hive.md`).
+(a) where RPC handlers live, (b) **how a method is registered/exposed**, (c) how
+params/results are typed (and the optionality idiom), (d) how to build and test
+it, and (e) the repo's **PR conventions / CI gates**. This file covers all five
+so the skill serves *any* change — new method, modified params/results, error
+behavior, deprecation — not just default-to-latest.
 
-Confidence levels are marked. **Verified** = exercised end-to-end in this skill's
-worked example. **Guidance** = correct starting points to confirm in-repo.
+For hive, the local-build pattern is the same everywhere: put your modified
+source where the client's `Dockerfile.local` expects it (`clients/<name>/<name>/`)
+and select `dockerfile: local`, OR build from a fork branch with
+`dockerfile: git` + `build_args: {github, tag}` (see `hive.md`).
+
+All six sections below are **Verified** (exercised end-to-end).
+
+## Per-client cheat sheet
+
+| Client | Lang | RPC handlers | How a method is registered/exposed | Optional-param idiom | Build / run tests |
+|---|---|---|---|---|---|
+| go-ethereum | Go | `internal/ethapi/*.go` | **Automatic** — exported method on an API service struct (`eth_<method>` = lowercased name); only edit `backend.go` `GetAPIs()` for a *new service struct* | `*T` pointer trailing arg (nil = omitted) | `make geth` / `go test ./internal/ethapi/` |
+| Erigon | Go | `rpc/jsonrpc/*.go` | **Add to `EthAPI` interface** (`eth_api.go`) + `APIImpl` method; exposed via `rpc.API` in `daemon.go` | `*rpc.BlockNumberOrHash` pointer | `make erigon` / `go test ./rpc/jsonrpc/...` |
+| Nethermind | C# | `…/Modules/Eth/EthRpcModule.cs` | **Add to `IEthRpcModule` + `[JsonRpcMethod]`**; auto-registered; only touch `EthModuleFactory` for new ctor deps | nullable `T? x = null` | `dotnet build` / NUnit in `…JsonRpc.Test` |
+| Reth | Rust | `crates/rpc/rpc-eth-api/src/core.rs` + helpers | **Add `#[method(name=…)]` to the `EthApiServer` trait** + impl; auto-registered via `into_rpc()` | `Option<BlockId>` (None→latest) | `cargo build` / `cargo test -p reth-rpc-eth-api` |
+| Besu | Java | `…/jsonrpc/internal/methods/*.java` | **3 edits:** method class + `RpcMethod` enum + the methods *factory* (`EthJsonRpcMethods`) | `getOptionalParameter(i, …)` | `./gradlew installDist` / `./gradlew test` (JDK per build) |
+| ethrex | Rust | `crates/networking/rpc/eth/*.rs` | **Add a `match` arm** in `rpc.rs` (`"eth_x" => XRequest::call(...)`) + an `RpcHandler` (parse/handle) | manual `params.len()` + `Option`-style default | `cargo build` / `cargo test -p ethrex-rpc` |
+
+**Registration takeaway:** geth/Erigon/Nethermind/Reth auto-expose a method once
+it's on the API surface; **Besu and ethrex require an explicit registry/dispatch
+entry** — forget it and the method is "method not found" even though the handler
+compiles.
+
+## PR conventions & CI gates (what gets a PR bounced)
+
+These are enforced by CI and/or reviewers — get them right *before* pushing:
+
+- **go-ethereum**: commit/PR title `package: imperative summary` (e.g.
+  `internal/ethapi: …`); tests expected; reviewers require a matching
+  **execution-apis spec** PR and often wait for another client + a release
+  boundary; prefer the `eth` namespace and the most general API shape.
+- **Erigon**: title `rpc:`/`rpc/jsonrpc:`; tests must exercise the new branch
+  (reviewers flag coverage gaps); strong push on execution-apis field-shape
+  compliance; spec-conformance via the external `erigontech/rpc-tests` (an
+  `RPC_VERSION` tag).
+- **Nethermind**: fill the **PR template** — reviewers flag blank templates and
+  require the **release-notes** box ticked for user-visible RPC changes; tests
+  required; return `ResultWrapper.Fail(...)` rather than throwing (the client
+  sees the `RpcErrorType` message, not the exception detail).
+- **Reth**: **conventional-commit titles** (`feat(rpc): …`); `cargo fmt` +
+  `cargo clippy` + tests are CI gates; no DCO.
+- **Besu**: **DCO sign-off on every commit** (`git commit -s`, CI-enforced);
+  **`CHANGELOG.md`** entry under `## Unreleased`; **`./gradlew spotlessApply`**
+  (formatting/license-header gate); add a unit test *and* a JSON spec scenario
+  under `src/test/resources/.../jsonrpc/eth/` (BySpec tests).
+- **ethrex**: **conventional-commit PR titles with a required scope** — CI lints
+  the title (`.github/workflows/pr_lint_pr_title.yml`); allowed types `feat fix
+  perf refactor revert deps build ci test style chore docs`, scopes **`l1` `l2`
+  `levm`** (`requireScope: true`), e.g. `feat(l1): …`. An AI reviewer checks hex
+  formatting (quantities `{:#x}` vs 32-byte values `0x{:064x}` vs addresses
+  `{:#x}`) and `notFound → null` semantics; intentionally-skipped tests must be
+  noted in `docs/known_issues.md`.
+
+> The exact rules drift — when a title/format check fails, read the failing
+> workflow under the client's `.github/workflows/` rather than guessing.
 
 ## go-ethereum — Go — VERIFIED
 
@@ -199,15 +253,34 @@ from its siblings*.
 - hive: `clients/ethrex/` has `Dockerfile` and `Dockerfile.git` (no
   `Dockerfile.local`). Build from a fork via `build_args: {github: <you/ethrex>,
   tag: <branch>}`; the `Dockerfile.git` `rust:latest` builder + ethrex's
-  `rust-toolchain.toml` auto-fetches the pinned toolchain. Verified: all six
-  default-block fixtures pass on a from-fork build (including the newly-added
-  `eth_getStorageValues`).
+  `rust-toolchain.toml` auto-fetches the pinned toolchain.
+- **Verification caveat (good example of gotcha #10a, value-fixtures angle):** the
+  default-latest *behavior* is verified — the new parse-layer unit tests prove
+  omitted→latest, and against hive the omitted-block request returns the *same*
+  response as an explicit `"latest"` request. But ethrex does **not** pass the
+  rpc-compat *value* fixtures for these methods on the hive default chain — and
+  that's **pre-existing and unrelated**: a *stock* ethrex returns the same results
+  for explicit `"latest"` (e.g. `eth_getBalance(addr,"latest")` → `0x0` where other
+  clients return the funded balance), so it's an ethrex/hive default-chain
+  state-serving issue, out of scope for a spec PR. Lesson: when a client fails the
+  hardcoded fixture *value*, check whether it also fails with an explicit block —
+  if so, your change isn't the cause; prove your change via omitted==explicit
+  equivalence + a client unit test instead of the fixture value.
 
-## General per-client checklist for an optional-param change
+## General per-client checklist for any change
 
-1. Find the method's handler and how it declares the block param.
-2. Make the param optional in that client's idiom (pointer / nullable+default /
-   `Option<>` / optional accessor) and default to latest when absent.
-3. Add/adjust the client's own unit test if it has one for the method.
-4. Build the client; point hive at it via `dockerfile: local` (or `git`).
-5. Run rpc-compat with the omitted-param fixture; assert it passes.
+1. **Locate** the handler(s) and, for a new method, the registration point (cheat
+   sheet above).
+2. **Make the change** in that client's idioms — param optionality (pointer /
+   nullable+default / `Option<>` / optional accessor), result type, error type,
+   or a new handler + registration.
+3. **Add/adjust the client's own tests** — a new test for new behavior, and fix
+   any test asserting the *old* behavior. Grep for callers of a changed
+   signature.
+4. **Build AND run the client's tests** (definition of done) — and confirm the
+   command actually ran (toolchain shims can no-op; see gotcha #10a).
+5. **Point hive at your build** (`dockerfile: local` or `git` + fork branch) and
+   run rpc-compat. If a value fixture fails, check whether the client fails the
+   same call with an *explicit* block before assuming your change is the cause.
+6. **Meet the repo's PR conventions/CI gates** (sign-off, changelog, formatting,
+   conventional-commit title with required scope) before opening the PR.

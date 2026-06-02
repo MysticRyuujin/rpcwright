@@ -24,8 +24,8 @@ parameter looks like:
       schema: { $ref: '#/components/schemas/BlockNumberOrTagOrHash' }
 ```
 
-To mark a parameter optional with a documented default (idiom mirrors
-`eth_simulateV1`):
+**Example — making a parameter optional** with a documented default (idiom
+mirrors `eth_simulateV1`); this is the default-to-latest change:
 
 ```yaml
     - name: Block
@@ -33,6 +33,52 @@ To mark a parameter optional with a documented default (idiom mirrors
       description: "default: 'latest'"
       schema: { $ref: '#/components/schemas/BlockNumberOrTagOrHash' }
 ```
+
+## Adding a new method (and its schemas)
+
+A method is a full OpenRPC object under `src/<namespace>/<file>.yaml`:
+
+```yaml
+- name: eth_getThing
+  summary: Returns the thing for an address.
+  params:
+    - name: Address
+      required: true
+      schema: { $ref: '#/components/schemas/address' }
+    - name: Block
+      required: false
+      description: "default: 'latest'"
+      schema: { $ref: '#/components/schemas/BlockNumberOrTagOrHash' }
+  result:
+    name: Thing
+    schema: { $ref: '#/components/schemas/Thing' }
+  examples:
+    - name: eth_getThing example
+      params: [ { name: Address, value: '0x...' } ]
+      result: { name: Thing, value: '0x...' }
+```
+
+- **New types** become named components in `src/schemas/*.yaml` and are `$ref`'d.
+  Reuse existing schemas (`address`, `uint`, `bytes`, `hash32`,
+  `BlockNumberOrTagOrHash`, …) wherever possible — reviewers prefer reuse over a
+  new bespoke type.
+- **Wiring:** `specgen` assembles from the directories in the `Makefile`'s
+  `SPECFLAGS` (`-methods 'src/eth'`, `-schemas 'src/schemas'`, …). A file added
+  under an already-listed directory is picked up automatically; a brand-new
+  directory must be added to `SPECFLAGS`. Run `make build` and confirm the method
+  appears in `openrpc.json`.
+
+## Result schemas & errors
+
+- **Changing a result shape** is a spec change: edit the method's `result.schema`
+  (or its referenced component). speccheck validates each fixture's `result`
+  against this schema, so a too-loose schema lets wrong shapes through and a
+  too-strict one rejects valid output.
+- speccheck **skips error responses** (errors aren't fully standardized). To test
+  an *error* path, put `invalid` in the testgen case name (speccheck then skips
+  its result-schema check), and recall hive only compares error bodies when BOTH
+  sides are errors (`hive.md`). If the change standardizes an error, record it in
+  the method's `errors` block / `src/error-groups/`.
 
 ## Regenerate the compiled spec
 

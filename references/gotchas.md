@@ -1,6 +1,53 @@
 # The gotcha catalog
 
-Each entry: the symptom, the cause, the fix.
+Each entry: the symptom, the cause, the fix. Several entries use the
+default-to-latest change as the example, but each is an instance of a broader
+class — read them that way.
+
+## 0a. execution-apis CI can't go green for a client-coupled change (chicken-and-egg)
+
+- **Symptom:** the execution-apis PR's `Test` job fails at **`make fill`** /
+  "Fail if any files are untracked or have changes", even though `speccheck`
+  (`make test`) and `make lint` pass and your fixtures are committed.
+- **Cause:** `make fill` regenerates fixtures by building the **geth pinned in
+  `tools/go.mod`**. If your change needs new client behavior (a new method, a new
+  default, a new result field), upstream-pinned geth doesn't have it, so your new
+  testgen cases error or produce different output → the "no changes" gate fails.
+  CI does **not** use your local `replace` (it's uncommitted, and pointing it at a
+  personal fork branch isn't mergeable). This is structural: a spec+client change
+  is a two-PR dance.
+- **Fix / expectation:** there is no clean fix until the **client PR merges and
+  the execution-apis `go.mod` is bumped** to that geth commit (then `make fill`
+  reproduces the fixtures and CI goes green). Until then the red `make fill` is
+  *expected* — say so in the PR description, and rely on `speccheck` + the client's
+  own tests + a local `make fill` (with the `replace`) as proof. This is what
+  "not expected to merge until the client implementation lands" means in practice.
+
+## 0b. Every client repo has its own CI gates / PR rules — check before pushing
+
+- **Symptom:** a PR fails CI on something unrelated to the code — a title check,
+  a sign-off check, a formatting check, a missing changelog.
+- **Cause:** each client enforces different contributor gates (see the table in
+  `references/clients.md`): **conventional-commit PR titles with a *required
+  scope*** (ethrex: `feat(l1): …`, scopes `l1|l2|levm`; reth: `feat(rpc): …`);
+  **DCO sign-off on every commit** (Besu: `git commit -s`); **`CHANGELOG.md`**
+  entry (Besu); **`spotlessApply`** formatting (Besu); `cargo fmt`/`clippy`
+  (Rust); a **PR-template release-notes** box (Nethermind).
+- **Fix:** match the repo's conventions *before* pushing. When a check fails,
+  open the failing workflow under that repo's `.github/workflows/` and read the
+  actual rule rather than guessing. To fix a missing sign-off retroactively:
+  `git rebase --signoff <base>` then force-push.
+
+## 0c. A red CI check may be unrelated/flaky — confirm before chasing it
+
+- **Symptom:** a client PR shows a failing test job.
+- **Cause:** large client suites have flaky/timing tests unrelated to your change
+  (real example: go-ethereum's `TestTracingHTTPTimeout` in the `rpc` package).
+- **Fix:** read which test failed and which package. If it's outside what you
+  touched and is timing/infra-flavored, it's not yours — confirm `go vet ./...`
+  (or the build) is clean and your own tests pass, note it, and don't chase it.
+
+
 
 ## 1. Omitted trailing RPC param rejected (go-ethereum)
 

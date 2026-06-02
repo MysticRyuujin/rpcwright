@@ -48,10 +48,12 @@ class — read them that way.
   overflow" finding is moot when the RPC server already caps request-body size,
   and matching a sibling method's behavior (error class, validation order)
   usually beats a one-off "improvement" that makes one method inconsistent.
-  Critically, **match the reference client and the conformance fixture, not a
-  bot's idea of "nicer"** — e.g. a bot suggesting EIP-55-checksummed address keys
-  in a response is *wrong* when geth (the reference) and the `.io` fixture use
-  lowercase; following it would fail rpc-compat. Apply the genuinely correct
+  Usually **match the reference client and the conformance fixture, not a bot's
+  idea of "nicer"** — e.g. a bot suggesting EIP-55-checksummed address keys in a
+  response is *wrong* when geth (the reference) and the `.io` fixture use
+  lowercase; following it would fail rpc-compat. (Caveat: this holds only while
+  the reference client agrees with the spec — if geth itself is the deviation, the
+  spec wins and geth gets fixed; see #0d.) Apply the genuinely correct
   ones; decline the rest with a brief rationale on the PR.
 
 ## 0c. A red CI check may be unrelated/flaky — confirm before chasing it
@@ -63,7 +65,25 @@ class — read them that way.
   touched and is timing/infra-flavored, it's not yours — confirm `go vet ./...`
   (or the build) is clean and your own tests pass, note it, and don't chase it.
 
+## 0d. The reference client is not the source of truth — the spec is
 
+- **Symptom:** a client's response differs from the geth-generated `.io` fixture,
+  and the reflex is "make the client match geth."
+- **Cause:** fixtures are produced by running *one* reference client (go-ethereum),
+  so they encode that client's behavior — bugs included. go-ethereum is not
+  perfect and is not the authority on Ethereum; client diversity is. Treating
+  "geth does X" as the spec turns a geth bug into a conformance requirement for
+  everyone else.
+- **Fix:** arbitrate by **the spec + rough consensus across clients**, not by geth:
+  - If the spec mandates the behavior, the diverging client is wrong → fix it.
+  - If **geth** is the one that deviates from the spec (a real regression /
+    non-conformance), strongly prefer **fixing go-ethereum and its libraries** for
+    conformance, then regenerate the fixture — don't force peers to reproduce the
+    deviation.
+  - If the spec is silent/ambiguous, it's a standards question: take it to client
+    teams (ACD / RPC-standards), get rough consensus, write it into the spec, then
+    into fixtures. Don't unilaterally bless the geth behavior.
+  See "The spec is the source of truth — not any client" in `SKILL.md`.
 
 ## 1. Omitted trailing RPC param rejected (go-ethereum)
 

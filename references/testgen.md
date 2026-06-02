@@ -78,6 +78,14 @@ is unchanged. Therefore: any modified `.io` file represents a real behavior
 difference. Use this — regenerate, then `git status` to see exactly what your
 change altered.
 
+**Caveat — a fixture is only as correct as the client that generated it.** `make
+fill` records whatever the reference client (go-ethereum) returns, so a geth bug
+becomes the fixture's "expected" value and then every other client is graded
+against it. The fixture is a *proxy* for the spec, not the spec. When authoring or
+trusting a fixture, sanity-check the recorded value against the OpenRPC spec; if
+geth produced something non-conformant, fix geth and regenerate rather than
+canonizing the bug (see gotcha #0d).
+
 ## Adding a test case
 
 Cases are Go in `tools/testgen/generators.go`. Each method has a `MethodTests`

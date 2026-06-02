@@ -97,6 +97,21 @@ Each entry: the symptom, the cause, the fix.
   of directly — introduce a local: `bnh := f(); api.Method(ctx, x, &bnh)`. Grep
   the whole tree for callers before assuming the change is local.
 
+## 10c. Besu: client-facing error text ≠ source string
+
+- **Symptom:** you grep Besu's source for the error string a client returned
+  (e.g. `"Invalid block param (block not found)"`) and find it in `RpcErrorType`,
+  not in the method that produced it — the method's `InvalidJsonRpcParameters`
+  uses a *different* detail string ("Invalid block or block hash parameter (index
+  N)").
+- **Cause:** Besu serializes the `RpcErrorType` enum's static `message`, not the
+  exception's detail message.
+- **Fix:** map the client-visible text via `RpcErrorType`, then find which
+  methods throw with that `RpcErrorType` to locate the real handler. For
+  optional-param work, the relevant methods read the block with
+  `getRequiredParameter(idx, BlockParameterOrBlockHash.class)` (throws when
+  absent) — switch to `getOptionalParameter(...).orElse(BlockParameterOrBlockHash.LATEST)`.
+
 ## 10. Cross-client divergence read as your bug
 
 - **Symptom:** your client passes a fixture; another client fails it.

@@ -57,18 +57,50 @@ Pattern worth remembering: when one client fails a single fixture in a family
 that otherwise passes, look for the *one method whose param declaration differs
 from its siblings*.
 
-## Besu — Java — GUIDANCE
+## Besu — Java — VERIFIED
 
-- Handlers: JSON-RPC methods under
+- Handlers: one class per method under
   `ethereum/api/src/main/java/org/hyperledger/besu/ethereum/api/jsonrpc/internal/methods/`
-  (one class per method, e.g. `EthGetBalance.java`). Parameter parsing is manual
-  via `requestContext.getOptionalParameter(...)` / `getRequiredParameter(...)` —
-  optionality is explicit in code, so "default to latest" means using the
-  optional accessor and substituting `LATEST` when absent.
-- Build: `./gradlew installDist` (binary under `build/install/besu/bin/besu`).
-- hive: `clients/besu/` — check for `Dockerfile.local`; if absent, add one
-  mirroring another client's local Dockerfile, or use `Dockerfile.git` with your
-  fork/branch via `build_args: {github: <you/besu>, tag: <branch>}`.
+  — `EthGetBalance.java`, `EthGetCode.java`, `EthGetStorageAt.java`,
+  `EthGetTransactionCount.java`, `EthGetProof.java`, `EthGetStorageValues.java`.
+  Each extends `AbstractBlockParameterOrBlockHashMethod` and implements
+  `blockParameterOrBlockHash(request)`.
+- **No wire-level pointer trick like the Go clients** — Besu parses params
+  manually by index. The block param was read with
+  `request.getRequiredParameter(idx, BlockParameterOrBlockHash.class)`, which
+  *throws* when the param is absent → the method maps it to
+  `-32602 "Invalid block param (block not found)"`. Optionality is explicit in
+  code: switch to `getOptionalParameter(idx, BlockParameterOrBlockHash.class)
+  .orElse(BlockParameterOrBlockHash.LATEST)`.
+- The fix needs a "latest" constant. `BlockParameterOrBlockHash` had none (only
+  `BlockParameter.LATEST` exists, a different type), so add one:
+  `public static final BlockParameterOrBlockHash LATEST = new
+  BlockParameterOrBlockHash("latest");` — its constructor throws a *checked*
+  `JsonProcessingException`, so wrap it in a static factory that rethrows as
+  unchecked.
+- Block-param indices: `getBalance`/`getCode`/`getTransactionCount`/
+  `getStorageValues` → index 1; `getStorageAt`/`getProof` → index 2.
+- Besu implements all six (including the non-standard `eth_getStorageValues`), so
+  one uniform fix covers them all.
+- **Gotcha:** the client-visible error string is the `RpcErrorType` enum's static
+  message (`INVALID_BLOCK_PARAMS` → "Invalid block param (block not found)"), not
+  the `InvalidJsonRpcParameters` detail string in the method's catch block. Don't
+  grep the source for the literal client-facing text — find it via `RpcErrorType`.
+- Build: `./gradlew installDist` (output `build/install/besu/bin/besu`).
+  **JDK version matters:** Besu's `build.gradle` pins a Gradle Java *toolchain*
+  (`JavaLanguageVersion.of(25)`), so the build JDK must satisfy it (currently
+  JDK 25). A too-old JDK fails with a cryptic
+  `Failed to calculate the value of task ':datatypes:compileJava' property
+  'javaCompiler'` (toolchain resolution), **not** a clear "wrong Java version".
+- hive: `clients/besu/` has `Dockerfile`, `Dockerfile.git`, `Dockerfile.local`.
+  `Dockerfile.git` clones `build_args: {github: <org/besu>, tag: <branch>}` and
+  runs `./gradlew installDist`. **Gotcha:** the shipped `Dockerfile.git` pinned
+  `openjdk-21` (and stale `apt` version pins) and fails the toolchain step —
+  switch the builder to a JDK-25 base (e.g. `eclipse-temurin:25-jdk`, runtime
+  `eclipse-temurin:25-jre`). The Gradle build is the slow part (tens of minutes).
+  Note the source repo moved org: upstream is now `besu-eth/besu`, though hive's
+  prebuilt `Dockerfile` still pulls `hyperledger/besu:develop`. Verified: all six
+  default-block fixtures pass on a Besu built from a fork with this fix.
 
 ## Erigon — Go — VERIFIED
 

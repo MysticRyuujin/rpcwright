@@ -32,10 +32,14 @@ class — read them that way.
   scope*** (ethrex: `feat(l1): …`, scopes `l1|l2|levm`; reth: `feat(rpc): …`);
   **DCO sign-off on every commit** (Besu: `git commit -s`); **`CHANGELOG.md`**
   entry (Besu); **`spotlessApply`** formatting (Besu); `cargo fmt`/`clippy`
-  (Rust); a **PR-template release-notes** box (Nethermind).
-- **Fix:** match the repo's conventions *before* pushing. When a check fails,
-  open the failing workflow under that repo's `.github/workflows/` and read the
-  actual rule rather than guessing. To fix a missing sign-off retroactively:
+  (Rust); a **PR-template release-notes** box (Nethermind); and **test rules
+  encoded in `AGENTS.md`/`CONTRIBUTING.md`** (e.g. Nethermind's `AGENTS.md`: a bug
+  fix must ship a regression test).
+- **Fix:** match the repo's conventions *before* pushing. Read its
+  `AGENTS.md`/`CONTRIBUTING.md` and `.github/workflows/` rather than guessing —
+  and note that several clients run an **automated AI reviewer** on PRs that
+  enforces these rules (it will flag, e.g., a bug fix with no regression test)
+  even after human reviewers approve. To fix a missing sign-off retroactively:
   `git rebase --signoff <base>` then force-push.
 
 ## 0c. A red CI check may be unrelated/flaky — confirm before chasing it
@@ -154,19 +158,24 @@ class — read them that way.
   toolchain runs (`cargo --version` / `go version`) before trusting a green exit
   code. Here: `ASDF_RUST_VERSION=1.91.0 cargo test -p ethrex-rpc --lib`.
 
-## 10b. Changing an RPC interface signature breaks internal Go callers
+## 10b. A shared RPC signature change ripples — callers, overrides, client variants
 
-- **Symptom:** after switching a method's param to a pointer (for wire
-  optionality), the client no longer compiles — errors far from the handler.
-- **Cause:** in some clients the RPC interface is consumed by *internal* Go code,
-  not just the JSON-RPC dispatcher. Erigon is the example: `rpc/jsonrpc`'s
-  `EthAPI` is called by `rpc/contracts/direct_backend.go` (the `bind` backend)
-  and `rpc/mcp/*` (the MCP server), all passing value-type args. (geth had no
-  such internal callers, so its change was smaller.)
-- **Fix:** update the interface declaration, every implementation, AND every
-  caller. For callers that pass a function-call result you can't take the address
-  of directly — introduce a local: `bnh := f(); api.Method(ctx, x, &bnh)`. Grep
-  the whole tree for callers before assuming the change is local.
+- **Symptom:** after changing a method's signature the client won't compile
+  (errors far from the handler), or a behavior change silently misses a variant.
+- **Cause:** an RPC interface/base method is reached by more than the dispatcher:
+  - **Internal callers.** Erigon's `rpc/jsonrpc` `EthAPI` is called by
+    `rpc/contracts/direct_backend.go` (the `bind` backend) and `rpc/mcp/*`, all
+    passing value-type args. (geth had none, so its change was smaller.)
+  - **Subclasses / overrides and client-variant modules.** Nethermind's
+    `EthRpcModule` is extended by Optimism/Taiko/Flashbots/Merge variants — a base
+    change is inherited *only* if the variant doesn't override that method.
+- **Fix:** update the interface, every implementation, AND every caller; for a
+  function-call result you can't address directly, introduce a local
+  (`bnh := f(); api.Method(ctx, x, &bnh)`). Then grep the whole tree for callers
+  **and for overrides/variants** of the changed method, and confirm each either
+  inherits the change or gets its own. (A good completeness check when touching a
+  shared method: callers, overrides, sibling client-variant modules, and any
+  downstream default the method relies on.)
 
 ## 10c. Besu: client-facing error text ≠ source string
 

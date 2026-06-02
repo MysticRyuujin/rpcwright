@@ -147,7 +147,11 @@ So the definition of done for a client change is **all three**:
 2. The client's **own test suite compiles and passes** — at minimum the packages/
    modules you touched: `go test ./...` for the changed Go packages,
    `./gradlew test` / the affected `*Test.java`, `cargo test -p <crate>`, etc.
-   Grep for callers AND for tests asserting the prior behavior; fix both.
+   Grep for callers AND for tests asserting the prior behavior; fix both. Add a
+   regression test that hits the **exact path you fixed** (e.g. the *omitted*
+   param) — an existing test that passes the param *explicitly* is not one, and a
+   later refactor of the downstream default would silently regress it. (Many
+   repos require this; see gotcha #0b.)
 3. **hive `rpc-compat` is green** for the target tests.
 
 Do this *before* declaring done and *before* opening the PR — not after a reviewer

@@ -55,6 +55,12 @@ class — read them that way.
   the reference client agrees with the spec — if geth itself is the deviation, the
   spec wins and geth gets fixed; see #0d.) Apply the genuinely correct
   ones; decline the rest with a brief rationale on the PR.
+- **The maintainer's call governs their repo.** Skepticism applies to your own
+  default; it does not override the repo owner. If a maintainer endorses a bot
+  suggestion (or asks for a change) you'd have declined — e.g. "put the helper in
+  the base class," "use a private constructor for the constant" — implement it.
+  They set their codebase's standards, and a declined-bot-finding can become a
+  requested change once a human signs off on it.
 
 ## 0c. A red CI check may be unrelated/flaky — confirm before chasing it
 

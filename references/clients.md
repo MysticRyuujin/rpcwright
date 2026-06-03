@@ -47,9 +47,19 @@ These are enforced by CI and/or reviewers — get them right *before* pushing:
 - **Reth**: **conventional-commit titles** (`feat(rpc): …`); `cargo fmt` +
   `cargo clippy` + tests are CI gates; no DCO.
 - **Besu**: **DCO sign-off on every commit** (`git commit -s`, CI-enforced);
-  **`CHANGELOG.md`** entry under `## Unreleased`; **`./gradlew spotlessApply`**
-  (formatting/license-header gate); add a unit test *and* a JSON spec scenario
-  under `src/test/resources/.../jsonrpc/eth/` (BySpec tests).
+  **`CHANGELOG.md`** entry under `## Unreleased` — the section is *structured* and
+  reviewers point you to the exact nested heading. An RPC behavior change goes
+  under `### Breaking Changes` → as a **sub-bullet of the existing
+  `- RPC changes to enhance compatibility with other ELs` bullet** (not a new
+  top-level bullet). Note Besu files RPC behavior changes as *Breaking Changes*
+  **even when they improve cross-client compatibility** (e.g. defaulting an
+  omitted block param to `latest`). Match an adjacent sub-bullet's style:
+  one line — what changed, the affected RPCs, and a trailing PR link. A CHANGELOG-only
+  (markdown) change does **not** need `./gradlew spotlessApply` or a Gradle build
+  — spotless gates Java/license headers, not markdown. Otherwise:
+  **`./gradlew spotlessApply`** (formatting/license-header gate); add a unit test
+  *and* a JSON spec scenario under `src/test/resources/.../jsonrpc/eth/` (BySpec
+  tests).
 - **ethrex**: **conventional-commit PR titles with a required scope** — CI lints
   the title (`.github/workflows/pr_lint_pr_title.yml`); allowed types `feat fix
   perf refactor revert deps build ci test style chore docs`, scopes **`l1` `l2`

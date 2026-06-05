@@ -60,7 +60,15 @@ class — read them that way.
   suggestion (or asks for a change) you'd have declined — e.g. "put the helper in
   the base class," "use a private constructor for the constant" — implement it.
   They set their codebase's standards, and a declined-bot-finding can become a
-  requested change once a human signs off on it.
+  requested change once a human signs off on it. The inverse also works:
+  reasoned pushback on bot findings is routinely *accepted* by maintainers when
+  you cite the codebase invariant that makes the finding moot (e.g. "receipt
+  count = tx count is guaranteed by the receipts-root commitment; truncating
+  would mask storage corruption") — but expect a **half-accept**: agreeing the
+  behavior is right while still asking you to make the invariant *explicit*
+  (a `Preconditions.checkState(...)` over an implicit
+  `ArrayIndexOutOfBoundsException`). Offer the explicit check in your reply;
+  it's cheap and usually ends the thread.
 
 ## 0c. A red CI check may be unrelated/flaky — confirm before chasing it
 
@@ -229,6 +237,29 @@ class — read them that way.
   optional-param work, the relevant methods read the block with
   `getRequiredParameter(idx, BlockParameterOrBlockHash.class)` (throws when
   absent) — switch to `getOptionalParameter(...).orElse(BlockParameterOrBlockHash.LATEST)`.
+
+## 10d. Besu reviewers: chain time, not wall clock; weigh caches, don't count them
+
+Conventions Besu maintainers enforce on RPC-layer perf/caching PRs — each cost a
+review round on a real PR (besu-eth/besu#10524):
+
+- **`System.currentTimeMillis()` is "not a trusted source of time."** Anything
+  keyed to chain state — resolving the *next block's* fork via
+  `protocolSchedule.getForNextBlockHeader(header, timestamp)`, cache freshness,
+  staleness checks — must use `chainHeadHeader.getTimestamp()` (chain time), not
+  the wall clock. Wall-clock reads are skewable, nondeterministic, and untestable;
+  chain time derives from consensus state. This draws a **CHANGES_REQUESTED**
+  even on an otherwise-approved PR, so audit your diff for `currentTimeMillis`/
+  `Instant.now()` before pushing.
+- **Bound caches by weight, not entry count.** When cached values vary in size
+  (an `eth_feeHistory` result scales with `blockCount` × percentile-list length),
+  a `maximumSize(N)` entry cap doesn't bound memory — use a **weigher**
+  (Caffeine `maximumWeight` + `Weigher`) measuring key *and* value, with LRU
+  eviction. Reviewers award "bonus points" for retrofitting the weigher onto a
+  pre-existing adjacent cache in the same PR.
+- **Adding a second cache? Rename the first.** A lone `cache` field stops being
+  self-describing the moment a sibling appears — rename it for what it holds
+  (`perBlockFees`-style) in the same PR.
 
 ## 10. Cross-client divergence read as your bug
 

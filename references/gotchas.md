@@ -40,7 +40,9 @@ class — read them that way.
   and note that several clients run an **automated AI reviewer** on PRs that
   enforces these rules (it will flag, e.g., a bug fix with no regression test)
   even after human reviewers approve. To fix a missing sign-off retroactively:
-  `git rebase --signoff <base>` then force-push.
+  `git rebase --signoff <base>` then force-push. Run `gh pr checks` yourself —
+  a red DCO can sit through entire human review rounds unmentioned (besu#10524
+  got a full maintainer review while DCO was failing).
 - **But triage AI-reviewer *findings* skeptically** (distinct from the hard rules
   above): bots (Copilot, claude-review, etc.) mix real issues with false positives
   and over-engineering. Check each against the codebase's actual constraints and
@@ -250,16 +252,41 @@ review round on a real PR (besu-eth/besu#10524):
   the wall clock. Wall-clock reads are skewable, nondeterministic, and untestable;
   chain time derives from consensus state. This draws a **CHANGES_REQUESTED**
   even on an otherwise-approved PR, so audit your diff for `currentTimeMillis`/
-  `Instant.now()` before pushing.
+  `Instant.now()` before pushing. It's also a real bug, not just style: the
+  schedule expects **epoch seconds** and `currentTimeMillis()` is ~1000× larger,
+  so any *future* timestamp-scheduled fork resolves as already active (wrong fee
+  market/blob params before activation). Pre-existing wall-clock instances in
+  the files you touch are fair game to fix in the same pass — besu had three
+  beyond the two the reviewer flagged.
 - **Bound caches by weight, not entry count.** When cached values vary in size
   (an `eth_feeHistory` result scales with `blockCount` × percentile-list length),
   a `maximumSize(N)` entry cap doesn't bound memory — use a **weigher**
   (Caffeine `maximumWeight` + `Weigher`) measuring key *and* value, with LRU
   eviction. Reviewers award "bonus points" for retrofitting the weigher onto a
-  pre-existing adjacent cache in the same PR.
+  pre-existing adjacent cache in the same PR. Besu already ships the wrapper:
+  `org.hyperledger.besu.util.cache.MemoryBoundCache` (maxBytes + footprint
+  function, stats on) — reuse it instead of hand-rolling Caffeine
+  (`CodeCache`/`CodeMemoryFootprint` is the reference usage).
 - **Adding a second cache? Rename the first.** A lone `cache` field stops being
   self-describing the moment a sibling appears — rename it for what it holds
   (`perBlockFees`-style) in the same PR.
+
+## 10e. Besu tests: ErrorProne forbids reading from mocks; unified args break eq() stubs
+
+- **`DirectInvocationOnMock` is a compile error in Besu test sources.** You
+  cannot call a method on a `mock(...)` outside `when(...)`/`verify(...)` — e.g.
+  reading a stubbed list back off a mock to derive test data
+  (`new ArrayList<>(mockChain.getTxReceipts(h).get())`) fails
+  `compileTestJava`. Build the data locally and re-stub instead.
+- **When a change makes two call sites pass the same argument** (e.g. both now
+  use the chain-head timestamp where one used wall clock), Mockito stubs that
+  discriminated by `eq(timestamp)` silently change meaning: the more-specific
+  stub now captures *both* calls, and a half-stubbed mock that previously served
+  only one path (say, just `getFeeMarket()`) leaks into the other path's
+  unstubbed getters → NPEs. Audit every `eq()`-matched stub on the changed
+  signature: delete the now-redundant ones, fully stub the rest. A test that
+  *distinguished* the two timestamps to simulate a state change must be remodeled
+  (e.g. flip an `AtomicReference<ProtocolSpec>` between requests instead).
 
 ## 10. Cross-client divergence read as your bug
 

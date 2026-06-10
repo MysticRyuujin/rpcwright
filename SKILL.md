@@ -197,6 +197,9 @@ hive) rather than assuming.
 - [ ] A **regression test hits the exact path you changed** (the *omitted* param,
       the new method, the new error) — not a near-miss that passes the param
       explicitly.
+- [ ] **Comments are terse** — one line of WHY for non-obvious decisions only; no
+      blocks narrating what the code already says. Reviewers across every client
+      cut verbose comments (gotcha #0e).
 - [ ] **hive `rpc-compat` is green** for the target tests, built from *your*
       source (`dockerfile: local`/`git`), with `--sim.limit "rpc-compat/<test>"`.
 - [ ] Repo **CI gates** satisfied (gotcha #0b): conventional-commit title +
@@ -218,10 +221,23 @@ A condensed list. Full explanations in `references/gotchas.md`.
   is the *suite* pattern. The suite is gated first, so `--sim.limit "my-test"`
   matches no suite and silently runs **0 tests** (a false green). Use
   `--sim.limit "rpc-compat/my-test"`.
-- **hive does not check the spec.** rpc-compat replays `.io` fixtures and compares
-  responses exactly. The OpenRPC spec only matters for `speccheck` and fixture
-  generation. Changing the spec without regenerating fixtures changes nothing in
-  hive.
+- **hive checks the spec only for `speconly` tests.** For an ordinary test,
+  rpc-compat replays the `.io` fixture and compares the response *exactly* —
+  changing the spec without regenerating the fixture changes nothing. For a
+  `speconly` test, it validates the response against the method's **OpenRPC result
+  schema** (it ships `openrpc.json` into the sim), so there the spec *is* the
+  contract — fix `src/`, `make build`, re-ship `openrpc.json`. (Older hive did a
+  structural diff for `speconly`, rejecting missing/unexpected keys — too strict
+  for config-dependent optional fields; see hive.md.)
+- **`speconly` ≠ exact-match, and the fixture must be GENERATED, not hand-written.**
+  Mark a `Test` `SpecOnly` when the result is non-deterministic or client/config-
+  specific; the schema then governs it. But a `.io` fixture inherits the reference
+  client's *config* (which optional fields it emits depends on gcmode / state-
+  scheme / retention), so a hand-copied fixture can encode values no real node
+  produces and fail replay even against the client it was copied from. Always back
+  a `speconly` method with a testgen generator (assert only the client-agnostic
+  part in Go; let the schema cover the rest). `eth_capabilities` is the worked
+  example.
 - **speccheck enforces `required` params.** A fixture that omits a param only
   passes if the spec marks that param `required: false`. This is your proof that
   the spec change is doing work — flip it back to `required: true` and watch

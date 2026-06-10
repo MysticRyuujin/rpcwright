@@ -101,6 +101,24 @@ class — read them that way.
     into fixtures. Don't unilaterally bless the geth behavior.
   See "The spec is the source of truth — not any client" in `SKILL.md`.
 
+## 0e. Keep code comments terse — reviewers cut verbose ones (every client)
+
+- **Symptom:** a reviewer flags your comments as "very verbose and not always
+  relevant" and asks you to delete them — sometimes the *same* comments an earlier
+  reviewer asked you to add.
+- **Cause:** AI-written diffs tend to over-comment — multi-line blocks that narrate
+  *what* the code does, restate the obvious, or re-explain a decision already clear
+  from the call. Client teams across the board (this is **not** client-specific)
+  prefer terse code; explanatory sprawl reads as noise and reliably costs a review
+  round.
+- **Fix:** default to **one line of WHY** for a genuinely non-obvious decision (a
+  race, an invariant, a perf trick, an Error-Prone workaround). Delete comments
+  that restate WHAT the code says, and don't annotate self-evident calls
+  (`getForNextBlockHeader(h, h.getTimestamp())` needs no "uses chain time" note).
+  When unsure, write less — the *why* can live in the PR thread or commit message
+  instead of the source. Write comments at this altitude on the **first** pass so a
+  reviewer never has to ask. Applies to all clients and all languages.
+
 ## 1. Omitted trailing RPC param rejected (go-ethereum)
 
 - **Symptom:** `-32602 missing value for required argument N` when a caller omits
@@ -270,6 +288,16 @@ review round on a real PR (besu-eth/besu#10524):
 - **Adding a second cache? Rename the first.** A lone `cache` field stops being
   self-describing the moment a sibling appears — rename it for what it holds
   (`perBlockFees`-style) in the same PR.
+- **Cache-size estimates (JVM clients): they may ask for JOL.** A hand-derived
+  approximate-bytes weigher is accepted, but a perf-focused Besu reviewer may
+  suggest measuring real retained size with Java Object Layout
+  (`org.openjdk.jol.info.GraphLayout.parseInstance(obj).totalSize()`, which walks
+  the whole object graph — headers, padding, backing arrays, wrapper objects) in
+  a unit test rather than guessing. JOL is already a repo dependency
+  (`org.openjdk.jol:jol-core`, `testImplementation`), so adopting it is cheap;
+  offer a test that calibrates/asserts the weigher against measured size. It's a
+  reasonable ask for a memory-bounded cache. (See the general comment-terseness
+  rule under #0e — over-commenting the weigher math is the *opposite* failure.)
 
 ## 10e. Besu tests: ErrorProne forbids reading from mocks; unified args break eq() stubs
 

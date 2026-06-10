@@ -144,14 +144,29 @@ For a brand-new method (not just a case on an existing one):
 3. `make fill` then creates `tests/eth_getThing/<case>.io` automatically — the
    `--out` dir + the method name + each `Test.Name`. No `mkdir` needed; the
    `About` text becomes the `.io` comment header (hive's test description).
-4. Set `SpecOnly: true` on a `Test` when the result isn't deterministic — hive
-   then checks the response *structure* only, not the exact recorded value.
+4. Set `SpecOnly: true` on a `Test` when the result isn't deterministic or is
+   client/config-specific — both speccheck and hive then validate the response
+   against the method's **OpenRPC result schema**, not the exact recorded value.
+   The recorded `<<` value becomes just one valid example.
+
+   **Always GENERATE a `speconly` fixture from a real client — never hand-author
+   it.** A `.io` fixture inherits the reference client's *config*, not just its
+   behavior: optional fields present in the recorded example depend on how that
+   node was launched (gcmode, state-scheme, retention windows). A hand-copied
+   fixture (e.g. lifted from a client's unit-test vectors) can encode values no
+   real node produces — an internally-inconsistent head, or a field the client
+   never emits — and it will fail replay even against the very client it was
+   copied from. The cross-client contract for a `speconly` method is the
+   **schema**, so the only thing the fixture must be is one real, schema-valid
+   example. The `eth_capabilities` generator is the canonical example: it asserts
+   only the client-agnostic part (head number/hash == chain head) in Go and lets
+   the schema cover the config-specific retention fields.
 
 ## The .io fixture format
 
 ```
 // free-text comment becomes the hive test description
-// speconly:   <- optional marker: hive checks response STRUCTURE only, not exact value
+// speconly:   <- marker: response validated against the OpenRPC result SCHEMA, not exact value
 >> {"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":["0x7dcd...df"]}
 << {"jsonrpc":"2.0","id":1,"result":"0x56"}
 ```

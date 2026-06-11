@@ -16,9 +16,9 @@ go build .            # produces ./hive
 `simulators/ethereum/rpc-compat/`:
 
 - `Dockerfile` clones execution-apis at a git ref (`ARG branch=main`,
-  `ENV GIT_REF`) and copies its `tests/` into the image. It also ships
-  `openrpc.json` into the image (sibling of `tests/`) so `speconly` tests can be
-  validated against the spec — see below.
+  `ENV GIT_REF`), copies its `tests/` into the image, and **builds `openrpc.json`
+  from the cloned `src/` with specgen** so `speconly` tests can be validated
+  against the spec — see below.
 - `main.go` + `testload.go` load every `.io` file under `tests/` and replay it.
 - **For an ordinary test it does NOT consult the OpenRPC spec.** It compares the
   client response to the recorded `<<` response with `jsondiff` (exact match).
@@ -59,21 +59,26 @@ into the simulator dir and uncomment the `ADD` line:
 ```dockerfile
 # in simulators/ethereum/rpc-compat/Dockerfile:
 # ADD tests /execution-apis/tests          # <- uncomment this
-# ADD openrpc.json /execution-apis/openrpc.json   # <- and this, for speconly schema checks
 ```
 
 ```sh
-# put your fixtures + spec where the Dockerfile will ADD them:
+# put your fixtures where the Dockerfile will ADD them:
 rsync -a $EXECapis/tests/ $HIVE/simulators/ethereum/rpc-compat/tests/
-cp $EXECapis/openrpc.json $HIVE/simulators/ethereum/rpc-compat/openrpc.json
 # (the tests dir is self-contained: chain.rlp, genesis.json, forkenv.json,
 #  headfcu.json, and the per-method .io files)
 ```
 
 Confirm the chain matches if you only copy a few fixtures: `cmp` the two
 `chain.rlp` files. Fixtures are only valid against the chain they were generated
-on. **If you changed the spec, also re-copy `openrpc.json`** — `speconly` tests
-validate against it, and a stale spec in the sim silently checks the old schema.
+on.
+
+**Don't copy `openrpc.json` — you can't.** It's gitignored in execution-apis, and
+the sim builds it from the cloned `src/` with specgen at image-build time (see
+above). So a local *spec* change reaches `speconly` tests only by changing the
+**source the sim clones**: point the build at your execution-apis branch (the
+`branch`/`GIT_REF` build-arg) so specgen regenerates the schema from your `src/`.
+Overriding only `tests/` while the spec is cloned from a different ref leaves
+`speconly` tests validating against the old schema.
 
 ## Run against YOUR client built from source
 

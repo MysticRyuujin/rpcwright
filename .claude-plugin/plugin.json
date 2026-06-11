@@ -1,6 +1,6 @@
 {
   "name": "rpcwright",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Engineer and conformance-test Ethereum JSON-RPC (execution-apis) changes across execution-layer clients — go-ethereum, Nethermind, Erigon, Besu, Reth, ethrex.",
   "author": {
     "name": "MysticRyuujin",

@@ -28,23 +28,27 @@ go build .            # produces ./hive
   result schema** (the same `santhosh-tekuri/jsonschema` validation speccheck
   does), not against the recorded `<<` value. So any spec-valid response passes,
   regardless of which *optional* fields a given client/config includes. The
-  recorded `<<` value is then just one illustrative example. (If the method isn't
-  in the loaded spec, it falls back to a structural type-match against the
-  recorded value.)
+  recorded `<<` value is then just one illustrative example. There is **no
+  structural fallback** — a `speconly` method missing from the spec fails the test
+  loudly, and the sim **panics at startup** if `openrpc.json` can't be loaded.
+- The sim **builds `openrpc.json` from the cloned spec source** (specgen) at image
+  build time — `openrpc.json` is gitignored in execution-apis, so it is *not* in
+  the clone and cannot simply be copied. The Dockerfile runs specgen (which pulls
+  zero go-ethereum packages, so it's cheap) with the same flags as execution-apis'
+  `make build`.
 
 > Historical note / gotcha: `speconly` used to be a *structural* diff against the
 > recorded `<<` example — it rejected both **missing** keys and **unexpected**
 > keys. That is too strict for any method whose response shape is client- or
 > config-dependent (e.g. `eth_capabilities`, whose `oldestBlock`/`deleteStrategy`
-> fields appear or not depending on gcmode/state-scheme/retention). The fix was to
-> make `speconly` mean "valid per the OpenRPC schema," shipping `openrpc.json` into
-> the rpc-compat image. If you hit a `speconly` failure like `unexpected key in
-> response` / `missing key`, you are on an old hive that still does the structural
-> diff — update it.
+> fields appear or not depending on gcmode/state-scheme/retention). The fix made
+> `speconly` mean "valid per the OpenRPC schema" (hive #1531). If you hit a
+> `speconly` failure like `unexpected key in response` / `missing key`, you are on
+> an old hive that still does the structural diff — update it.
 
 So: an ordinary test is changed via the `.io` fixtures (and the client); a
 `speconly` test is governed by the **OpenRPC schema** in `src/` — fix the spec,
-`make build`, and re-ship `openrpc.json`.
+and the sim regenerates `openrpc.json` from source on its next image build.
 
 ## Run against LOCAL fixtures (your modified tests)
 

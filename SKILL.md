@@ -2,139 +2,100 @@
 name: rpcwright
 description: >-
   Use when implementing, changing, or conformance-testing the Ethereum JSON-RPC
-  API (the execution-apis / OpenRPC spec) across execution-layer clients. Covers
-  the full loop: changing a client (go-ethereum first, plus Nethermind, Besu,
-  Erigon, Reth, ethrex), editing the execution-apis OpenRPC spec, writing
-  rpctestgen test cases, generating and validating .io fixtures with speccheck,
-  and running the hive rpc-compat simulator against one or more clients. Triggers
-  on tasks involving eth_* / debug_* / txpool_* JSON-RPC methods, execution-apis
-  PRs, rpctestgen / testgen, .io test fixtures, speccheck, openrpc.json, or hive
-  rpc-compat. Read this BEFORE guessing build/test steps — it encodes the exact
-  commands and the non-obvious gotchas that otherwise cost hours.
+  API (execution-apis / OpenRPC spec) across execution-layer clients (go-ethereum,
+  Nethermind, Besu, Erigon, Reth, ethrex). Covers the full loop: change a client,
+  edit the OpenRPC spec, write rpctestgen cases, generate/validate .io fixtures
+  with speccheck, run the hive rpc-compat simulator. Triggers on eth_* / debug_* /
+  txpool_* methods, execution-apis PRs, rpctestgen / testgen, .io fixtures,
+  speccheck, openrpc.json, or hive rpc-compat. Read this BEFORE guessing build/test
+  steps — it encodes the exact commands and non-obvious gotchas that cost hours.
 ---
 
 # rpcwright — Ethereum JSON-RPC standards engineering
 
-A field guide for making and proving a change to the Ethereum execution-layer
-JSON-RPC API — adding a new method, adding or modifying a parameter, changing a
-result shape or error behavior, deprecating a method, or anything else in the
-execution-apis (OpenRPC) spec. The hard part is rarely the change itself — it is
-the four repos that must agree (the client, the spec, the test generator, the
-cross-client harness) and the dozen places a silent failure hides. This skill
-encodes the exact commands and the gotchas.
+A field guide for making and *proving* a change to the Ethereum execution-layer
+JSON-RPC API — a new method, a new/changed param, a result-shape or error change, a
+deprecation. The hard part isn't the change; it's the four repos that must agree
+(client, spec, test generator, cross-client harness) and the many places a silent
+failure hides.
 
-Throughout, **"default an omitted block param to latest"** (execution-apis
-[#812](https://github.com/ethereum/execution-apis/pull/812)) is used as a
-concrete running example — but the workflow is identical for any change. The full
-narrative of that example lives in `references/worked-example.md`.
+**"Default an omitted block param to latest"** (execution-apis
+[#812](https://github.com/ethereum/execution-apis/pull/812)) is the running example
+below; the workflow is identical for any change. Full narrative:
+`references/worked-example.md`.
 
-> Conventions in this skill: paths are generic. Set these once and the snippets
-> below copy-paste cleanly. Adjust to wherever you cloned each repo.
+> Paths are generic — set these once and the snippets copy-paste cleanly:
 > ```sh
-> export GETH=~/code/go-ethereum          # the client under change (primary)
-> export EXECapis=~/code/execution-apis    # the OpenRPC spec + testgen + speccheck
-> export HIVE=~/code/hive                   # the cross-client conformance harness
+> export GETH=~/code/go-ethereum         # client under change (primary)
+> export EXECapis=~/code/execution-apis  # OpenRPC spec + testgen + speccheck
+> export HIVE=~/code/hive                 # cross-client conformance harness
 > ```
 
 ## The mental model (read this first)
 
 Four moving parts, in dependency order:
 
-1. **The client** (e.g. go-ethereum) implements the RPC method. This is the
-   actual behavior.
-2. **execution-apis** holds the **OpenRPC spec** — per-method YAML under `src/`
-   (`src/eth/*.yaml`, `src/schemas/*.yaml`), compiled into `openrpc.json` by the
-   `specgen` tool. This is the *contract*.
-3. **testgen** (lives at `execution-apis/tools/testgen`) is Go code defining test
-   cases. The `rpctestgen` tool spins up a **real client binary**, runs each case
-   against it, and records the request/response as a **`.io` fixture** under
-   `execution-apis/tests/<method>/<case>.io`. **speccheck** then validates those
-   fixtures against `openrpc.json`.
-4. **hive** is the cross-client harness. Its **`rpc-compat`** simulator clones
-   execution-apis at a git ref, copies the `tests/` fixtures into a container,
-   and **replays each `.io` fixture against the client under test, comparing the
-   response byte-for-byte** (via jsondiff). It does **not** consult the OpenRPC
-   spec at runtime.
+1. **The client** (e.g. go-ethereum) implements the method — the actual behavior.
+2. **execution-apis** holds the **OpenRPC spec**: per-method YAML under `src/`
+   (`src/eth/*.yaml`, `src/schemas/*.yaml`), compiled to `openrpc.json` by
+   `specgen`. This is the *contract*.
+3. **testgen** (`execution-apis/tools/testgen`) defines test cases; `rpctestgen`
+   runs each against a **real client binary** and records the request/response as a
+   **`.io` fixture** under `tests/<method>/<case>.io`. **speccheck** then validates
+   those fixtures against `openrpc.json`.
+4. **hive** is the cross-client harness; its **`rpc-compat`** simulator replays each
+   `.io` fixture against a client and compares the response — exact-match via
+   jsondiff for ordinary tests, OpenRPC-schema validation for `speconly` tests.
 
-So a behavior change flows through all four:
+A behavior change flows through all four:
 
 ```
 edit client behavior ─▶ add client unit test
-        │
         ▼
-edit execution-apis OpenRPC YAML ─▶ regenerate openrpc.json (make build)
-        │
+edit OpenRPC YAML ─▶ regenerate openrpc.json (make build)
         ▼
 add a testgen case ─▶ generate .io fixtures with the MODIFIED client (make fill)
-        │
         ▼
 speccheck the fixtures against the spec (make test)
-        │
         ▼
-hive rpc-compat replays the fixtures against every client (build clients from
-local source as needed; assert failed=0)
+hive rpc-compat replays fixtures against every client (build from local source;
+assert failed=0)
 ```
 
-Miss any stage and you get a plausible-but-wrong result: a green hive run that
-ran zero tests, a fixture that passes speccheck only because the param was still
-"required", or a client that "works" because the harness used a prebuilt image
-without your change.
+Miss a stage and you get a plausible-but-wrong result: a green hive run that ran
+zero tests, a fixture that passes speccheck only because the param stayed
+"required", or a client that "works" because hive used a prebuilt image.
 
 ## The spec is the source of truth — not any client
 
-**execution-apis (the OpenRPC spec) is the contract. No single client is.** This
-matters because the `.io` fixtures are *generated by running one reference client*
-(today, go-ethereum), so they inherit that client's behavior — **including its
-bugs**. A geth-ism can silently become a fixture's "expected" value, and then
-rpc-compat would penalize every other client for not copying it.
-
-So when a client's response differs from a geth-generated fixture, do **not**
-conclude "geth does it this way, so the others must too." Ask instead:
-
-1. **What does the spec actually mandate?** If the spec is silent or ambiguous,
-   it's a spec question — not a "match geth" question.
-2. **Is geth itself conformant here?** go-ethereum is not perfect and is not held
-   to a higher standard than its peers. If geth has a legitimate regression or
-   deviates from the spec, the right fix is to **fix go-ethereum (and its
-   libraries)** for conformance and regenerate the fixture — not to force the
-   other clients to reproduce the deviation.
-3. **Is there rough consensus across clients?** Client diversity is a core tenet
-   of Ethereum. Behavior that isn't pinned by the spec should be settled by rough
-   consensus among client teams (ACD / the RPC-standards discussion), then written
-   into the spec — and only then into fixtures.
-
-Practical consequence: "match the reference client / the fixture" (which several
-gotchas below recommend) holds **only while the reference and the spec agree**. If
-they disagree, the spec wins, and the reference client is the thing that should
-change.
+The OpenRPC spec is the contract; **no single client is.** `.io` fixtures are
+generated from *one* reference client (go-ethereum), so they inherit its behavior —
+**including its bugs**. So when a client diverges from a geth-generated fixture,
+don't conclude "match geth." Ask: (1) what does the spec mandate? (2) is geth itself
+conformant — if geth is the deviation, fix go-ethereum (and its libraries) and
+regenerate, don't force peers to copy it; (3) if the spec is silent, settle by rough
+consensus across client teams (ACD / RPC-standards), write it into the spec, *then*
+into fixtures. "Match the reference/fixture" (which several gotchas recommend) holds
+**only while reference and spec agree** — otherwise the spec wins. (Gotcha #0d.)
 
 ## The golden-path recipe
 
-This is the end-to-end sequence. Each step links to a reference file with the
-detail and the traps.
+Each step links to its reference for the detail and the traps.
 
-1. **Implement the behavior in the client** and add a unit test that exercises it
-   through the real RPC server (not just the Go function). → `references/go-ethereum.md`
-2. **Update the OpenRPC spec** in `$EXECapis/src/...` and regenerate:
-   `cd $EXECapis && make build`. → `references/execution-apis.md`
+1. **Implement in the client** + a unit test through the *real* RPC server (not just the Go function). → `references/go-ethereum.md`
+2. **Update the OpenRPC spec** in `$EXECapis/src/...`, then `cd $EXECapis && make build`. → `references/execution-apis.md`
 3. **Add a testgen case** in `$EXECapis/tools/testgen/generators.go`. → `references/testgen.md`
-4. **Generate fixtures with your modified client**: point testgen's go.mod at your
-   local client, then `make fill`. Revert any unrelated fixture drift. → `references/testgen.md`
-5. **Validate**: `cd $EXECapis && ./tools/speccheck -v`. Sanity-check enforcement
-   with a negative test. → `references/execution-apis.md`
-6. **Run hive rpc-compat** with your client built from local source, using a
-   client-file and the correct `--sim.limit` form. Assert `failed=0`. → `references/hive.md`
-7. **Run the changed client's own test suite** and fix what your change broke —
-   then it's done. See "Definition of done" below. → `references/clients.md`
-8. **Cross-client**: add other clients; investigate any failure — it may be that
-   client's bug, which you can patch locally to prove and then report upstream.
-   → `references/clients.md`
+4. **Generate fixtures with your client**: `go.mod` replace → `make fill`; revert unrelated fixture drift. → `references/testgen.md`
+5. **Validate**: `./tools/speccheck -v`; sanity-check enforcement with a negative test. → `references/execution-apis.md`
+6. **Run hive rpc-compat** from local source, correct `--sim.limit` form, assert `failed=0`. → `references/hive.md`
+7. **Run the changed client's own test suite** and fix what you broke. → "Definition of done" + `references/clients.md`
+8. **Cross-client**: add other clients; a failure may be that client's bug — patch locally to prove, then report upstream. → `references/clients.md`
 
 ## What to touch, by change type
 
-Every JSON-RPC change is a combination of the same touchpoints. Find your row,
-then use the reference files for each cell. Default-to-latest (making a param
-optional) is just one row — the running example.
+Every JSON-RPC change is a combination of the same touchpoints. Find your row, then
+use the reference files for each cell. Default-to-latest (making a param optional)
+is just one row — the running example.
 
 | Change type | Client: behavior | Client: register? | Spec `src/*.yaml` | Spec schemas | testgen | speccheck angle | hive |
 |---|---|---|---|---|---|---|---|
@@ -146,153 +107,55 @@ optional) is just one row — the running example.
 | **Deprecate / remove** | remove/guard handler | unregister | remove method | no | remove cases + `tests/<m>/` | — | — |
 
 **Registration is per-client.** Most clients auto-expose a method once it's on the
-RPC surface (geth reflection on the API struct; Nethermind interface +
-`[JsonRpcMethod]`; reth/Erigon trait/interface). **Besu and ethrex need an explicit
-entry** (Besu: `RpcMethod` enum + the methods factory; ethrex: the `rpc.rs` match
-arm). Details and exact files per client in `references/clients.md`.
+RPC surface (geth reflection; Nethermind interface + `[JsonRpcMethod]`;
+reth/Erigon trait/interface). **Besu and ethrex need an explicit entry** (Besu:
+`RpcMethod` enum + the methods factory; ethrex: the `rpc.rs` match arm). Per-client
+files in `references/clients.md`.
 
 ## Definition of done (read before you say "done" or open a PR)
 
-**A green hive run does NOT mean the change is done.** hive only exercises runtime
-behavior over JSON-RPC. It never compiles or runs the *client's own* unit/
-integration test suite — but the PR's CI will, and it will fail if you left
-anything broken. A behavior or signature change routinely breaks the client's own
-tests in ways hive can't see:
+**A green hive run is NOT done.** hive only exercises runtime behavior over
+JSON-RPC; it never compiles or runs the *client's own* test suite — but the PR's CI
+does. A signature/behavior change routinely breaks (a) internal and test callers
+that the hive binary build may never compile (e.g. Erigon's `rpc/contracts` +
+`rpc/mcp`), and (b) tests asserting the OLD behavior (e.g. Besu's
+`EthGetProofTest.errorWhenNoBlockNumberSupplied`). Done = **all three**: client
+binary builds + the client's own tests (for the modules you touched) compile and
+pass + hive `rpc-compat` green. Confirm this *before* the PR, not after a reviewer.
 
-- **Compile breaks from a signature change.** Making a param optional often means
-  changing a type (Go value→pointer, a trait/interface signature). That ripples to
-  *internal callers* and *test callers* that the binary build for hive may not even
-  compile. (Erigon: changing `EthAPI` to `*rpc.BlockNumberOrHash` broke
-  `rpc/contracts` and `rpc/mcp` callers plus several test files — none of which the
-  hive `make erigon` binary build touches.)
-- **Tests asserting the OLD behavior.** A test that asserted "omitting the block
-  errors" will now fail because it returns latest. (Besu: `EthGetProofTest`'s
-  `errorWhenNoBlockNumberSupplied` had to become a "defaults to latest" test.)
-
-So the definition of done for a client change is **all three**:
-
-1. The client **binary builds** (what hive needs), AND
-2. The client's **own test suite compiles and passes** — at minimum the packages/
-   modules you touched: `go test ./...` for the changed Go packages,
-   `./gradlew test` / the affected `*Test.java`, `cargo test -p <crate>`, etc.
-   Grep for callers AND for tests asserting the prior behavior; fix both. Add a
-   regression test that hits the **exact path you fixed** (e.g. the *omitted*
-   param) — an existing test that passes the param *explicitly* is not one, and a
-   later refactor of the downstream default would silently regress it. (Many
-   repos require this; see gotcha #0b.)
-3. **hive `rpc-compat` is green** for the target tests.
-
-Do this *before* declaring done and *before* opening the PR — not after a reviewer
-or CI catches it. If the client already complies, confirm it (run the tests /
-hive) rather than assuming.
-
-### Pre-PR checklist (run top to bottom before opening any client PR)
+### Pre-PR checklist (run top to bottom)
 
 - [ ] Client **binary builds** from your branch (what hive runs).
-- [ ] `grep` the whole tree for **callers, overrides, and client-variant modules**
-      of any signature you changed; update each (gotcha #10b).
-- [ ] Client's **own tests compile and pass** for the modules you touched
-      (`go test ./...` / `./gradlew test` / `cargo test -p <crate>`) — and confirm
-      the command *actually ran*, not a toolchain no-op (gotcha #10a/#0c).
-- [ ] A **regression test hits the exact path you changed** (the *omitted* param,
-      the new method, the new error) — not a near-miss that passes the param
-      explicitly.
-- [ ] **Comments are terse** — one line of WHY for non-obvious decisions only; no
-      blocks narrating what the code already says. Reviewers across every client
-      cut verbose comments (gotcha #0e).
-- [ ] **hive `rpc-compat` is green** for the target tests, built from *your*
-      source (`dockerfile: local`/`git`), with `--sim.limit "rpc-compat/<test>"`.
-- [ ] **Self-review the diff for duplication you introduced by copying a sibling
-      method.** If you copy-pasted an existing method's body, extract the shared
-      part into one helper at *that* layer and make both thin wrappers; collapse
-      any two methods that differ only in what they return; don't add new exported
-      symbols to a core package when changing one signature would do. Would a
-      maintainer halve this diff? Halve it first (gotcha #11).
-- [ ] Repo **CI gates** satisfied (gotcha #0b): conventional-commit title +
-      required scope, DCO sign-off, CHANGELOG, formatter (spotless/`cargo fmt`),
-      and any `AGENTS.md`/`CONTRIBUTING.md` rule (e.g. "bug fix needs a test").
-- [ ] Skim the repo's `.github/workflows/` so you know which checks will run.
+- [ ] **grep the whole tree** for callers, overrides, and client-variant modules of any signature you changed; update each (#10b).
+- [ ] Client's **own tests compile and pass** for touched modules (`go test ./...` / `./gradlew test` / `cargo test -p <crate>`) — and confirm the command *actually ran*, not a toolchain no-op (#10a/#0c).
+- [ ] A **regression test hits the exact path you changed** (the *omitted* param, the new method/error) — not a near-miss that passes the param explicitly.
+- [ ] **Comments are terse** — one line of WHY for non-obvious decisions only; reviewers across every client cut verbose comments (#0e).
+- [ ] **hive `rpc-compat` is green** for the target tests, built from *your* source (`dockerfile: local`/`git`), with `--sim.limit "rpc-compat/<test>"`.
+- [ ] **Self-review for copy-paste duplication** from a sibling method: extract the shared body into one helper at *that* layer, collapse two methods that differ only in what they return, add no needless new exported API (#11).
+- [ ] **Repo CI gates** (#0b): conventional-commit title + required scope, DCO sign-off, CHANGELOG, formatter — skim the repo's `.github/workflows/` so you know what runs.
 
-## The gotchas that cost hours
+## The gotchas that cost hours (full detail: `references/gotchas.md`)
 
-A condensed list. Full explanations in `references/gotchas.md`.
-
-- **Know each client's optionality idiom** (example of a broader class — every
-  change must match how a client expresses params/results). For an *optional
-  param*: go-ethereum needs a *pointer* trailing arg (a value type is mandatory →
-  `missing value for required argument N`); reth uses `Option<T>`; Nethermind a
-  nullable `T? = null`; Besu `getOptionalParameter`; ethrex a manual `params.len()`
-  check. Full per-client table in `references/clients.md`.
-- **`--sim.limit` needs the suite prefix.** It is `<suite>/<test>`. A bare string
-  is the *suite* pattern. The suite is gated first, so `--sim.limit "my-test"`
-  matches no suite and silently runs **0 tests** (a false green). Use
-  `--sim.limit "rpc-compat/my-test"`.
-- **hive checks the spec only for `speconly` tests.** For an ordinary test,
-  rpc-compat replays the `.io` fixture and compares the response *exactly* —
-  changing the spec without regenerating the fixture changes nothing. For a
-  `speconly` test, it validates the response against the method's **OpenRPC result
-  schema** (it ships `openrpc.json` into the sim), so there the spec *is* the
-  contract — fix `src/`, `make build`, re-ship `openrpc.json`. (Older hive did a
-  structural diff for `speconly`, rejecting missing/unexpected keys — too strict
-  for config-dependent optional fields; see hive.md.)
-- **`speconly` ≠ exact-match, and the fixture must be GENERATED, not hand-written.**
-  Mark a `Test` `SpecOnly` when the result is non-deterministic or client/config-
-  specific; the schema then governs it. But a `.io` fixture inherits the reference
-  client's *config* (which optional fields it emits depends on gcmode / state-
-  scheme / retention), so a hand-copied fixture can encode values no real node
-  produces and fail replay even against the client it was copied from. Always back
-  a `speconly` method with a testgen generator (assert only the client-agnostic
-  part in Go; let the schema cover the rest). `eth_capabilities` is the worked
-  example.
-- **speccheck enforces `required` params.** A fixture that omits a param only
-  passes if the spec marks that param `required: false`. This is your proof that
-  the spec change is doing work — flip it back to `required: true` and watch
-  speccheck reject the fixture.
-- **A newer client regenerates unrelated fixtures.** If your local client is ahead
-  of the version the committed fixtures were made with, `make fill` rewrites
-  unrelated `.io` files (e.g. `eth_simulateV1` error-code drift). `git checkout`
-  the unrelated changes to keep the diff focused.
-- **Use a `go.mod` replace for the local client — don't commit it.** testgen
-  builds whatever geth its module resolves; point it at your checkout with a
-  `replace` directive, but keep that out of the spec PR (it's an absolute local
-  path).
-- **Fixtures are deterministic** against the fixed chain in `tools/chain`. A clean
-  `make fill` reproduces them byte-for-byte; any change in output is a real
-  behavior change.
-- **hive defaults to the official prebuilt client image.** To test *your* change
-  you must build the client from local source (`dockerfile: local`) — otherwise
-  the harness silently tests upstream, not you.
-- **A green hive run is not "done".** hive never compiles or runs the client's own
-  test suite, but the PR's CI does. Signature/behavior changes break internal
-  callers and tests asserting the old behavior. Run the client's tests before
-  declaring done — see "Definition of done" above.
-- **Adding a method by copying its sibling is a refactor signal, not a shortcut.**
-  Green tests don't mean clean code. If the easy way to write your new method is to
-  copy an existing one and change the ends, extract the shared body *first* — at the
-  layer where the duplication actually is, not one layer down — and write both as
-  thin wrappers. Two methods that differ only in *what they return* (e.g. a block
-  vs. an envelope derived from it) should be one method returning the union.
-  Minimize new exported API in core packages. Self-review for this before pushing,
-  or a maintainer halves your diff for you (gotcha #11).
+- **Optionality idiom is per-client** (#1, clients.md): geth needs a *pointer* trailing arg (a value type is mandatory → `missing value for required argument N`); reth `Option<T>`; Nethermind `T? = null`; Besu `getOptionalParameter`; ethrex a manual `params.len()` check. Every change must match how that client expresses params/results.
+- **`--sim.limit` needs the suite prefix** (#2): it's `<suite>/<test>`; a bare string matches no suite and runs **0 tests** at exit 0 (false green). Use `rpc-compat/<test>` and assert `tests>0`.
+- **hive checks the spec only for `speconly`** (#9, hive.md): ordinary tests replay the `.io` fixture exact-match, so changing the spec without regenerating the fixture does nothing; `speconly` tests validate against the OpenRPC result schema (ship `openrpc.json` into the sim).
+- **`speconly` fixtures must be GENERATED, not hand-written** (testgen.md): a fixture inherits the reference client's *config* (which optional fields it emits), so a hand-copied one can encode values no node produces and fail replay. Back every `speconly` method with a generator. `eth_capabilities` is the example.
+- **speccheck enforces `required`** (#4): an omitted-param fixture passes only if the spec marks the param `required: false` — that's your proof the spec change is load-bearing.
+- **A newer client regenerates unrelated fixtures** (#5): `make fill` rewrites drifted `.io` files (e.g. `eth_simulateV1` error codes); `git checkout` them to keep the diff focused.
+- **Don't commit the `go.mod` replace** (#6): it's an absolute local path; the real change is a version bump once the client PR merges.
+- **Fixtures are deterministic** (testgen.md) against the fixed `tools/chain` — any output change is a real behavior change.
+- **hive defaults to the prebuilt upstream image** (#3): build from local source (`dockerfile: local`) or it silently tests upstream, not you.
+- **A shared signature change ripples** (#10b): update the interface, every impl, every caller, AND client-variant overrides — grep for all of them.
+- **Keep comments terse** (#0e): one line of WHY only; verbose comments reliably cost a review round on every client.
+- **Copying a sibling method is a refactor signal** (#11): extract the shared body first (at the layer the duplication is in), make both thin wrappers; two methods differing only in what they return → one returning the union; minimize new exported API.
+- **A green hive run is not "done"** (#10a): see Definition of done above.
 
 ## Reference files
 
 - `references/go-ethereum.md` — build, test, RPC method/param patterns, in-proc RPC test harness.
-- `references/execution-apis.md` — OpenRPC YAML, specgen/openrpc.json, speccheck, the `required` semantics.
+- `references/execution-apis.md` — OpenRPC YAML, specgen/openrpc.json, speccheck, `required` semantics.
 - `references/testgen.md` — rpctestgen, `make fill`, the `.io` format, local-client `go.mod` replace, determinism.
 - `references/hive.md` — rpc-compat architecture, local fixtures, building clients from source, client-files, the `--sim.limit` trap, reading results.
-- `references/clients.md` — per-client handler locations and local-build notes: go-ethereum, Nethermind, Erigon, Besu, Reth & ethrex (all verified).
+- `references/clients.md` — per-client handler locations, registration, optionality idioms, builds, and CI gates: go-ethereum, Nethermind, Erigon, Besu, Reth, ethrex (all verified).
 - `references/gotchas.md` — the full gotcha catalog with explanations and fixes.
-- `references/worked-example.md` — a complete worked change ("default an omitted block param to latest") end to end, including a real cross-client bug found and fixed.
-
-## Scope notes
-
-This workflow is client-agnostic and applies to any JSON-RPC change. The
-per-client reference (`references/clients.md`) gives, for each of **go-ethereum,
-Nethermind, Erigon, Besu, Reth, and ethrex**: where RPC handlers live, how a
-method is registered/exposed, how params and results are typed, how to build and
-run its tests, and its CI gates (formatting, sign-off, changelog) — the reusable
-knowledge for *any* change, not just this one. The default-to-latest example was
-carried end-to-end through all six (Go, Java, and Rust stacks); one of them
-(ethrex) also needed a brand-new method (`eth_getStorageValues`) implemented,
-which exercises the add-a-method path too.
+- `references/worked-example.md` — the default-to-latest change end to end across all six clients, including a real cross-client bug found and fixed.

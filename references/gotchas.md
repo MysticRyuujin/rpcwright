@@ -325,3 +325,43 @@ review round on a real PR (besu-eth/besu#10524):
   client bug, optionally patch that client locally to prove the fixture is
   correct, then file an upstream report. (See the Nethermind `eth_getStorageValues`
   case in `clients.md`.)
+
+## 11. A maintainer halves your diff — you wrote the new method by copying its sibling
+
+- **Symptom:** the new method works, its tests pass, and hive is green, but a
+  maintainer pushes a "cleanup" commit that rewrites it into roughly half the
+  lines — folding duplicated method bodies into one helper and collapsing two
+  near-identical public methods into one. (Real case: `testing_commitBlockV1`,
+  go-ethereum #34995 — a clean implementation, then −69/+23 by the maintainer.)
+- **Cause:** two refactor smells, both produced by writing the new method as a
+  copy of the existing one ("the write companion of the read method"):
+  1. **Deduped at the wrong layer.** The path of least resistance is to copy the
+     sibling's body verbatim and change only the ends. We did that to the
+     `eth/catalyst` handler (a ~25-line param-decode / args-build block copied
+     between `BuildBlockV1` and the new `CommitBlockV1`), then — to "be DRY" —
+     extracted a helper one layer *down* in `miner` that only removed a trivial
+     one-line duplication. The real, bulky duplication sat untouched in the layer
+     we'd actually copy-pasted in. The accepted fix put the shared body in **one**
+     helper *at the layer where the duplication lives* (`api.buildTestingBlock(...)`
+     returning `(*types.Block, *ExecutionPayloadEnvelope, error)`); both methods
+     became two-line wrappers.
+  2. **Two public methods that differ only in what they return.** We minted a new
+     exported `miner.CommitTestingBlock` (returns `*types.Block`) beside the
+     existing `miner.BuildTestingPayload` (returns `*ExecutionPayloadEnvelope`) —
+     same computation, differing only in which projection of the result they hand
+     back, and one projection (the envelope) is *derived from* the other (the
+     block). The accepted fix had the one existing method return **both** and let
+     each caller take what it needs. Net: an unexported helper + 2 exported
+     methods → 1 method; **zero** new exported symbols in the core `miner` package.
+- **Fix:** when the cleanest way to write your new method is "copy the sibling and
+  tweak the ends," treat that as the signal to **extract the shared middle first**,
+  then write both methods as thin wrappers — at the layer where the duplication
+  actually is, not a layer you happen to also be editing. When two methods compute
+  the same thing and only project different fields of the result, **return the
+  union once** rather than adding a second method per projection. And **minimize
+  new exported surface**: prefer changing one existing signature over adding new
+  public API to a core package — every exported symbol is something maintainers
+  must keep forever. Self-review the diff for this *before* pushing: if you can see
+  a maintainer collapsing it, collapse it yourself. (This is a code-quality /
+  API-design class, not a correctness bug — hive and unit tests stay green either
+  way, which is exactly why it slips through to review.)

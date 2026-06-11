@@ -202,6 +202,12 @@ hive) rather than assuming.
       cut verbose comments (gotcha #0e).
 - [ ] **hive `rpc-compat` is green** for the target tests, built from *your*
       source (`dockerfile: local`/`git`), with `--sim.limit "rpc-compat/<test>"`.
+- [ ] **Self-review the diff for duplication you introduced by copying a sibling
+      method.** If you copy-pasted an existing method's body, extract the shared
+      part into one helper at *that* layer and make both thin wrappers; collapse
+      any two methods that differ only in what they return; don't add new exported
+      symbols to a core package when changing one signature would do. Would a
+      maintainer halve this diff? Halve it first (gotcha #11).
 - [ ] Repo **CI gates** satisfied (gotcha #0b): conventional-commit title +
       required scope, DCO sign-off, CHANGELOG, formatter (spotless/`cargo fmt`),
       and any `AGENTS.md`/`CONTRIBUTING.md` rule (e.g. "bug fix needs a test").
@@ -260,6 +266,14 @@ A condensed list. Full explanations in `references/gotchas.md`.
   test suite, but the PR's CI does. Signature/behavior changes break internal
   callers and tests asserting the old behavior. Run the client's tests before
   declaring done — see "Definition of done" above.
+- **Adding a method by copying its sibling is a refactor signal, not a shortcut.**
+  Green tests don't mean clean code. If the easy way to write your new method is to
+  copy an existing one and change the ends, extract the shared body *first* — at the
+  layer where the duplication actually is, not one layer down — and write both as
+  thin wrappers. Two methods that differ only in *what they return* (e.g. a block
+  vs. an envelope derived from it) should be one method returning the union.
+  Minimize new exported API in core packages. Self-review for this before pushing,
+  or a maintainer halves your diff for you (gotcha #11).
 
 ## Reference files
 

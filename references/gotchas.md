@@ -319,12 +319,17 @@ review round on a real PR (besu-eth/besu#10524):
 ## 10. Cross-client divergence read as your bug
 
 - **Symptom:** your client passes a fixture; another client fails it.
-- **Cause:** the other client hasn't implemented the behavior (e.g. a
-  non-nullable param). It's that client's gap, not yours.
-- **Fix:** confirm by reading the `response differs` block; if it's a genuine
-  client bug, optionally patch that client locally to prove the fixture is
-  correct, then file an upstream report. (See the Nethermind `eth_getStorageValues`
-  case in `clients.md`.)
+- **Cause:** in likelihood order — (a) **hive client-config gap** (RPC namespace off,
+  `HIVE_TARGET_GAS_LIMIT`/forkenv knob not mapped to a flag, wrong state/pruning
+  backend); (b) **stale hive checkout** missing the wiring (#12); (c) **genuine client
+  bug** (non-nullable param, unpersisted state). Rarely your change or the spec.
+- **Fix:** read the `response differs`/error block and classify. Config gaps are fixed
+  in the hive wrapper, not the client. For a real bug, patch the client locally to prove
+  the fixture, then file upstream with the stack trace and configs you ruled out. (See
+  Nethermind `eth_getStorageValues` in `clients.md`.) **Don't stop at the first config
+  that helps** (7→4 can be necessary-but-not-sufficient): pass, or exhaust the config
+  space to prove a code bug — still failing in the exact backend a method needs is strong
+  evidence of one.
 
 ## 11. A maintainer halves your diff — you wrote the new method by copying its sibling
 
@@ -365,3 +370,14 @@ review round on a real PR (besu-eth/besu#10524):
   a maintainer collapsing it, collapse it yourself. (This is a code-quality /
   API-design class, not a correctness bug — hive and unit tests stay green either
   way, which is exactly why it slips through to review.)
+
+## 12. Stale hive fork masquerades as a client/spec failure
+
+- **Symptom:** new-method fixtures fail `method does not exist`, clients disagree on
+  block-production output, or a client crashes at launch — looks like a client/fixture bug.
+- **Cause:** `$HIVE` isn't current `ethereum/hive`; its wrappers predate the needed
+  wiring (namespace enablement, `HIVE_TARGET_GAS_LIMIT` mapping). If `origin` is your
+  fork, `git rev-list HEAD..origin/master`=`0` while you're months behind upstream.
+- **Fix:** compare against `upstream` (`ethereum/hive`), `git grep <token> upstream/master
+  -- clients/` to confirm a feature is present, `git checkout upstream/master --
+  clients/<name>/<file>` to pull just what you need. See hive.md "Use a CURRENT upstream hive."

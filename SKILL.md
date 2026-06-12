@@ -145,6 +145,9 @@ pass + hive `rpc-compat` green. Confirm this *before* the PR, not after a review
 - **Don't commit the `go.mod` replace** (#6): it's an absolute local path; the real change is a version bump once the client PR merges.
 - **Fixtures are deterministic** (testgen.md) against the fixed `tools/chain` — any output change is a real behavior change.
 - **hive defaults to the prebuilt upstream image** (#3): build from local source (`dockerfile: local`) or it silently tests upstream, not you.
+- **Verify `$HIVE` is current upstream `ethereum/hive`** (#12, hive.md): a stale fork lacks recent wiring (RPC namespaces, `HIVE_TARGET_GAS_LIMIT`) and fakes client/spec bugs; `git rev-list HEAD..origin/master`=`0` when `origin` is your fork — compare against `upstream`.
+- **Cross-client divergence is usually a config gap, not a bug** (#10, hive.md): namespace off, gas-limit unpinned, or wrong state backend. `testing_*` need their namespace enabled per client; block-producing fixtures need `HIVE_TARGET_GAS_LIMIT` pinned or geth/Nethermind diverge on gasLimit→blockHash.
+- **A client that fails to launch skips its tests** (hive.md): `tests=N` silently drops, not fails — confirm each `client launch` passed; `--docker.output` shows launch crashes; beware stale `workspace/logs/<client>/*.log`.
 - **A shared signature change ripples** (#10b): update the interface, every impl, every caller, AND client-variant overrides — grep for all of them.
 - **Keep comments terse** (#0e): one line of WHY only; verbose comments reliably cost a review round on every client.
 - **Copying a sibling method is a refactor signal** (#11): extract the shared body first (at the layer the duplication is in), make both thin wrappers; two methods differing only in what they return → one returning the union; minimize new exported API.

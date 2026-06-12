@@ -96,6 +96,15 @@ These are enforced by CI and/or reviewers — get them right *before* pushing:
 - Build: `dotnet build -c release` from `src/Nethermind/Nethermind.Runner`.
 - hive local build: `clients/nethermind/Dockerfile.local` copies
   `clients/nethermind/nethermind/` and runs the dotnet build.
+- Non-eth namespaces are gated by `EnabledModules` in `clients/nethermind/mkconfig.jq`
+  (add `"Testing"` for `testing_*`), separate from `[JsonRpcMethod]` registration.
+- **hive runs Nethermind in-memory by default** (`Init.UseMemDb: true`, hash-trie).
+  Quirk: the `UseMemDb` setter *ignores its arg* and always forces `DiagnosticMode=MemDb`
+  — `"UseMemDb": false` is a no-op; **remove** the key to get RocksDB. Matters for
+  state-mutating methods: `testing_commitBlockV1` relies on the flat-DB snapshot bundle
+  to persist committed state, which the in-mem/hash default never produces → a second
+  commit fails (`MissingTrieNodeException`, or `Unable to gather snapshots` once flat is
+  forced via `FlatDb.Enabled`+RocksDB). Confirm in log: `State backend: patricia|flat`.
 
 ### Example: a single-method divergence
 

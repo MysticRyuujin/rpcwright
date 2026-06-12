@@ -11,6 +11,21 @@ cd $HIVE
 go build .            # produces ./hive
 ```
 
+## Use a CURRENT upstream hive — a stale fork wastes hours
+
+Client wrappers and the simulator evolve; a stale `$HIVE` lacks recent wiring (RPC
+namespaces, env plumbing) and fakes "bugs." **If `origin` is your fork,
+`git rev-list HEAD..origin/master` says `0` while you're months behind upstream** —
+compare against `ethereum/hive`:
+
+```sh
+git remote add upstream https://github.com/ethereum/hive.git 2>/dev/null
+git fetch upstream master && git rev-list --count HEAD..upstream/master   # >0 → behind
+git grep <token> upstream/master -- clients/      # is a merged-PR feature actually present?
+```
+
+Pull just what you need: `git checkout upstream/master -- clients/<name>/<file>`.
+
 ## How rpc-compat sources tests and clients
 
 `simulators/ethereum/rpc-compat/`:
@@ -115,6 +130,32 @@ Fields: `client` (subdir under clients/), `dockerfile` (extension; omit = plain
 `Dockerfile`), `nametag` (label in the image/result name), `build_args`
 (e.g. `tag`, `baseimage`, `github`).
 
+## forkenv → client env → flags, and gas-limit pinning
+
+rpc-compat loads `tests/forkenv.json` and passes it to each client as **`HIVE_*` env
+vars** (`main.go`); the client's wrapper (`*.sh` / `mkconfig.jq`) turns those into
+flags. A new forkenv knob is inert until **both** ends exist (env var + wrapper
+consumer).
+
+**`HIVE_TARGET_GAS_LIMIT`** (execution-apis #801 / hive #1496) is the example. Unpinned,
+block-*producing* fixtures diverge: geth moves parent gasLimit toward `--miner.gaslimit`
+by `parent/1024` per block; Nethermind holds parent unless `Blocks.TargetBlockGasLimit`
+is set → different gasLimit→baseFee→blockHash. New clients must add the same mapping.
+Gas-limit-only divergence ⇒ suspect this, not the client.
+
+## The `testing_` namespace and state-mutating methods
+
+`testing_buildBlockV1`/`testing_commitBlockV1` live in a **`testing` namespace OFF by
+default** — enable per client (like registration, clients.md): geth `--http.api=...,testing`;
+Nethermind `EnabledModules:[...,"Testing"]` (hive #1496 did this). Missing ⇒ `-32601 method
+does not exist` / `namespace 'Testing' is disabled` — not a bug. Other clients implement
+them, so they're real conformance targets.
+
+`commit`-style methods **mutate state** (insert block, advance head). A fixture calling
+them repeatedly (or after another commit on the shared client) needs the prior commit's
+state persisted — exposes backend-specific state bugs (clients.md). First commit may pass,
+later ones fail: check per-fixture sequencing, not "empty vs content".
+
 ## Run it
 
 ```sh
@@ -163,6 +204,18 @@ A `response differs` block shows `-- client` (what the client returned) vs
 argument 1` from a client means that client rejects the omitted param — i.e. it
 hasn't implemented the optional-param behavior (see `clients.md` for a real
 example and fix).
+
+**Break failures down per client** — the same fixture can pass on one, fail on another:
+`jq -r '.testCases|to_entries[]|"\(.value.summaryResult.pass)\t\(.value.name)"' "$F"`.
+
+### A client that fails to LAUNCH skips its tests (another false-green)
+
+A container that dies at startup fails its `client launch` test and its method tests
+**never run** (skipped, not failed) — `tests=N` silently drops (e.g. 20→11) while the
+run still "finishes." Confirm each client's `client launch` passed and ran its expected
+sub-tests. To see *why* it died, re-run with **`--docker.output`** (streams container
+stdout/stderr). Beware stale logs: `ls -t workspace/logs/<client>/*.log` can return a
+*previous* run's file — check its timestamp.
 
 ## Iterating quickly
 

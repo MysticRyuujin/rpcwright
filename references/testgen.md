@@ -21,7 +21,8 @@ execution-apis/tools/
   testgen/
     generators.go        # ALL test cases live here (MethodTests / Test structs)
     chain.go, utils.go   # chain helpers used by the cases
-  chain/                 # the FIXED chain the fixtures are generated against
+  chain/                 # the FIXED chain the fixtures are generated against (generated
+                         # by hivechain in the hive repo — see hivechain.md)
     chain.rlp genesis.json accounts.json forkenv.json headfcu.json txinfo.json
 ```
 

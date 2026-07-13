@@ -106,6 +106,7 @@ is just one row — the running example.
 | **Change error code/behavior** | return new error | no | `errors`/error-groups if speced | no | a case with `invalid` in its name (skips result-schema check) | skips error bodies | errors compared only when BOTH sides error |
 | **Deprecate / remove** | remove/guard handler | unregister | remove method | no | remove cases + `tests/<m>/` | — | — |
 | **Bump test-chain fork** (hivechain.md) | none | no | no | no | patch hivechain (hive repo) → regen `tools/chain` → bump `tools/go.mod` geth → fix broken generators → full `make fill` | full re-run | replays everything; new-fork divergences surface per client |
+| **Spec a named tracer's output** (tracers.md) | none (or fix the reference impl) | no | add titled branch to each trace method's result `anyOf` (keep the escape hatch) | new tracer schema — recursive via `$id`-anchored self-`$ref`, NOT `#/components` (specgen cycle error) | cross-client comparison FIRST (tracers.md); recursive validators + per-config cases; chain scenarios via hivechain mods | add branch title to speccheck's tracer selection — the `anyOf` is NOT enforced otherwise | exact-match where clients agree; SpecOnly where semantics are unsettled |
 
 **Registration is per-client.** Most clients auto-expose a method once it's on the
 RPC surface (geth reflection; Nethermind interface + `[JsonRpcMethod]`;
@@ -153,6 +154,9 @@ pass + hive `rpc-compat` green. Confirm this *before* the PR, not after a review
 - **Keep comments terse** (#0e): one line of WHY only; verbose comments reliably cost a review round on every client.
 - **Copying a sibling method is a refactor signal** (#11): extract the shared body first (at the layer the duplication is in), make both thin wrappers; two methods differing only in what they return → one returning the union; minimize new exported API.
 - **A green hive run is not "done"** (#10a): see Definition of done above.
+- **A named-tracer `anyOf` branch is documentation until speccheck selects it** (tracers.md): the unconstrained escape-hatch branch accepts anything, so add the branch title to `tools/cmd/speccheck/tracer.go` AND prove it with a corrupted-nested-field negative test.
+- **Recursive schemas break specgen** (tracers.md): `#/components` self-refs are a build error ("cycle detected"); use an absolute-URI `$id` + self-`$ref` — specgen passes non-fragment refs through and `$id` resolves at validation time. Never round-trip a schema through `openrpc.JSONSchemaObject` twice (union types double-wrap `type`).
+- **Never compare client output through a caching proxy** (tracers.md): eRPC caches `debug_*` across upstreams and re-serializes JSON — byte-identical cross-client responses are a red flag. SSH-forward to nodes and use raw bytes.
 - **The test chain is generated, not hand-maintained** (hivechain.md): it comes from `hivechain` in the **hive repo** via `mkchain.sh`; `make fill` copies `tools/chain/{genesis.json,chain.rlp,forkenv.json,headfcu.json}` into `tests/` — never hand-edit the `tests/` copies. A fork exists only when BOTH hivechain ends emit it (genesis case + `output_forkenv.go` HIVE_* vars) AND client mappers consume it; regenerating with a newer hivechain also changes the tx population (new mods can shadow `FindTransaction` matchers or blow fixtures past rpc-compat's 1 MiB line buffer — `-disable-txmods`).
 
 ## Reference files
@@ -161,6 +165,7 @@ pass + hive `rpc-compat` green. Confirm this *before* the PR, not after a review
 - `references/execution-apis.md` — OpenRPC YAML, specgen/openrpc.json, speccheck, `required` semantics.
 - `references/testgen.md` — rpctestgen, `make fill`, the `.io` format, local-client `go.mod` replace, determinism.
 - `references/hivechain.md` — how the test chain is generated (hivechain in the hive repo), mkchain.sh knobs, forkenv → mapper.jq plumbing, the fork-bump recipe, chain-regen gotchas.
+- `references/tracers.md` — spec'ing named-tracer output (callTracer worked case): the recursive-`$id` schema pattern, speccheck branch selection, per-client tracer impls + verified divergences, the cross-client comparison recipe (and the eRPC-cache trap).
 - `references/hive.md` — rpc-compat architecture, local fixtures, building clients from source, client-files, the `--sim.limit` trap, reading results.
 - `references/clients.md` — per-client handler locations, registration, optionality idioms, builds, and CI gates: go-ethereum, Nethermind, Erigon, Besu, Reth, ethrex (all verified).
 - `references/gotchas.md` — the full gotcha catalog with explanations and fixes.

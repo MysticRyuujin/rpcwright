@@ -1,6 +1,6 @@
 # Contributing to rpcwright
 
-rpcwright is a Claude Skill: **reusable, timeless guidance** for engineering and
+rpcwright is an agent skill: **reusable, timeless guidance** for engineering and
 conformance-testing Ethereum JSON-RPC (execution-apis) changes across clients.
 PRs from humans and agents are welcome — the bar:
 
@@ -31,6 +31,18 @@ illustrates a general technique*. A work-artifact is not. Cut or generalize:
 - Prefer verifying client specifics against the actual repo — file paths and CI
   rules drift, so the skill says "read the workflow/source" rather than freezing
   exact details that go stale.
+
+## Stay host-neutral
+
+Claude Code and Codex both load this skill, so keep it portable:
+
+- Frontmatter stays `name` + `description` — the two fields every host requires.
+  Don't add host-specific keys.
+- Cite reference files by relative path, and don't name one tool's features or
+  built-in tools in the instructions.
+- Front-load the trigger words in `description`. Codex budgets the initial skill
+  list to 2% of the context window and shortens long descriptions first, so the
+  tail is what gets cut.
 
 ## Mirror files
 

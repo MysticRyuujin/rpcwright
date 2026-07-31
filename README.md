@@ -3,10 +3,9 @@
 > A *wright* is a maker — a shipwright builds ships, a playwright builds plays.
 > A **rpcwright** builds (and proves) Ethereum JSON-RPC.
 
-**rpcwright** is a [Claude Skill](https://docs.claude.com/en/docs/claude-code/skills)
-that teaches an AI agent how to implement and conformance-test a change to the
-**Ethereum execution-layer JSON-RPC API** — across the four repos that have to
-agree:
+**rpcwright** is an [agent skill](https://agentskills.io) that teaches an AI agent
+how to implement and conformance-test a change to the **Ethereum execution-layer
+JSON-RPC API** — across the four repos that have to agree:
 
 | repo | role |
 | --- | --- |
@@ -45,6 +44,14 @@ rediscover them the slow way.
 
 ## Install
 
+Claude Code and Codex both read the same format — a directory with a `SKILL.md` —
+so one copy serves both. Only the directory each one scans differs:
+
+| tool | personal scope | repo scope | explicit call |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude/skills/` | `.claude/skills/` | `/rpcwright` |
+| Codex | `~/.agents/skills/` | `.agents/skills/` | `$rpcwright`, or `/skills` |
+
 ### Claude Code plugin (no clone)
 
 ```text
@@ -54,24 +61,22 @@ rediscover them the slow way.
 
 ### Manual (personal skill)
 
-Personal skills live under `~/.claude/skills/`. Clone into place:
-
-```sh
-git clone https://github.com/MysticRyuujin/rpcwright.git ~/.claude/skills/rpcwright
-```
-
-Or symlink a working copy:
+Clone once, then symlink it into the tools you use. Both follow a symlinked skill
+directory, so a single `git pull` updates every tool:
 
 ```sh
 git clone https://github.com/MysticRyuujin/rpcwright.git
-ln -s "$PWD/rpcwright" ~/.claude/skills/rpcwright
+mkdir -p ~/.claude/skills ~/.agents/skills
+ln -s "$PWD/rpcwright" ~/.claude/skills/rpcwright   # Claude Code
+ln -s "$PWD/rpcwright" ~/.agents/skills/rpcwright   # Codex
 ```
 
-Claude discovers the skill from its `SKILL.md` frontmatter and loads it when a
+Either tool discovers the skill from its `SKILL.md` frontmatter and loads it when a
 task involves the Ethereum JSON-RPC API, execution-apis, rpctestgen/testgen,
 `.io` fixtures, `speccheck`, `openrpc.json`, or hive `rpc-compat`.
-`AGENTS.md`, `CLAUDE.md`, and `llms.txt` are symlinks to `SKILL.md` so other
-agent tooling discovers the same content.
+
+`AGENTS.md`, `CLAUDE.md`, and `llms.txt` are symlinks to `SKILL.md`, so a repo that
+vendors rpcwright at its root also picks it up as plain project instructions.
 
 ## Scope
 

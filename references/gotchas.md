@@ -381,3 +381,28 @@ review round on a real PR (besu-eth/besu#10524):
 - **Fix:** compare against `upstream` (`ethereum/hive`), `git grep <token> upstream/master
   -- clients/` to confirm a feature is present, `git checkout upstream/master --
   clients/<name>/<file>` to pull just what you need. See hive.md "Use a CURRENT upstream hive."
+
+## 13. Known standing client bugs — don't re-discover these
+
+Two divergences that will resurface on unrelated changes. Recognize them and move
+on instead of re-investigating from scratch.
+
+- **Reth cannot produce legacy (pre-Byzantium) receipts.** Any raw-receipt-RLP
+  method (e.g. `debug_getRawReceipts`) always encodes the Byzantium+ single-byte
+  `status` field, even for a block that predates Byzantium in the chain's fork
+  schedule — where the correct encoding is the pre-Byzantium 32-byte post-state
+  `root` instead. Confirmed on reth `main` while reviewing execution-apis #865
+  (2026-08-23): the plain `debug_getRawReceipts/get-block-n` fixture — unrelated
+  to #865's hash-param change — already failed against the geth-generated
+  fixture for exactly this reason. Any rpc-compat fixture whose block predates
+  Byzantium in the hive chain's fork schedule will show the same divergence on
+  reth. Not yet filed upstream — do that before re-verifying it again.
+- **ethrex cannot import the hive chain past its point of pre-merge support** —
+  it doesn't handle pre-merge blocks/chains, so a stock ethrex serving the
+  standard hive test chain has real gaps in its historical state (confirmed:
+  `debug_getRawReceipts` for an early block returned `null` instead of a
+  receipts array). This is the root cause behind the ethrex state-serving
+  caveat in `clients.md` (`0x0`/`null` at `latest` for state methods) — it's a
+  hive-chain import limitation, not a per-method bug, so expect it on *any*
+  method that reads state or receipts from an early block on the stock chain.
+  Apply gotcha #0c before blaming your change.

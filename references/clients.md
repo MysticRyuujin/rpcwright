@@ -226,6 +226,11 @@ from its siblings*.
 - Build: `cargo build --release --bin reth`. Tests: `cargo test -p
   reth-rpc-eth-api` (trait-signature changes ripple to impls and tests).
 - hive: `clients/reth/` (`Dockerfile`/`Dockerfile.git`/`Dockerfile.local`).
+- **Known standing bug: cannot produce legacy (pre-Byzantium) receipts.** Any
+  raw-receipt-RLP method always encodes the Byzantium+ status byte, even for a
+  block that predates Byzantium — where the correct encoding uses the
+  pre-Byzantium 32-byte post-state root instead. See gotcha #13; don't
+  re-diagnose this as caused by whatever you're changing.
 
 ## ethrex — Rust
 
@@ -261,12 +266,16 @@ from its siblings*.
   `Dockerfile.local`). Build from a fork via `build_args: {github: <you/ethrex>,
   tag: <branch>}`; the `Dockerfile.git` `rust:latest` builder + ethrex's
   `rust-toolchain.toml` auto-fetches the pinned toolchain.
-- Caveat: ethrex's hive default-chain state-serving has gaps — a stock ethrex can
-  return `0x0`/`null` for account state at `latest`, so rpc-compat *value*
-  fixtures for the state methods may fail independent of any spec change. Apply
-  gotcha #0c: check whether the client fails the same call with an *explicit*
-  block before blaming your change, and prove the change via the client's unit
-  tests + omitted==explicit-block equivalence rather than the fixture value.
+- **Known standing bug: cannot import the hive chain past its point of pre-merge
+  support** — ethrex doesn't handle pre-merge blocks/chains, so a stock ethrex
+  serving the standard hive test chain has real gaps in its historical state (a
+  stock ethrex can return `0x0`/`null` for account state at `latest`, or `null`
+  instead of a receipts array for an early block). rpc-compat *value* fixtures
+  for state/receipt methods may fail independent of any spec change, on any
+  method that reads early-block state. See gotcha #13. Apply gotcha #0c: check
+  whether the client fails the same call with an *explicit* block before
+  blaming your change, and prove the change via the client's unit tests +
+  omitted==explicit-block equivalence rather than the fixture value.
 
 ## General per-client checklist for any change
 

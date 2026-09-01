@@ -80,6 +80,42 @@ A method is a full OpenRPC object under `src/<namespace>/<file>.yaml`:
   sides are errors (`hive.md`). If the change standardizes an error, record it in
   the method's `errors` block / `src/error-groups/`.
 
+## Open vs closed object schemas (`additionalProperties`)
+
+JSON Schema objects are **open by default**: `required` enforces that fields are
+*present*, but nothing forbids extra keys. "Exactly these fields" takes both
+`required` and `additionalProperties: false`.
+
+This matters because the conformance stack has two enforcement layers of
+different strictness. Schema validation (speccheck, hive `speconly`) enforces
+only what the schema says; ordinary hive tests replay geth-recorded fixtures
+exact-match. With an open schema, a client emitting an extra field is
+**spec-valid yet fails exact-match** — the spec and the tests disagree, and the
+extra field is legislated by an accident of fixture generation instead of by the
+contract.
+
+- **Default a NEW result schema to `additionalProperties: false`.** The repo's
+  newer schemas do this; the old `Block`-family schemas are open for historic
+  reasons — don't copy that.
+- **Not a reason to stay open:** tolerating non-mainnet client extension fields
+  (e.g. AuRa's `author`/`step`/`signature`). execution-apis governs Ethereum;
+  other networks were never conformance targets.
+- **When open is right:** the object genuinely admits client- or
+  config-specific members that can't be enumerated. Prefer naming them as
+  optional properties if you can.
+- **Cost to know:** a closed schema is fork-versioned — a client already
+  emitting a next-fork field is schema-invalid against the older spec ref.
+  Spec, fixtures, and the hive sim build from one ref, so CI stays consistent;
+  standalone validators pinned to an old `openrpc.json` will reject newer
+  clients.
+- **Composition trap:** `additionalProperties: false` breaks `allOf`-style
+  reuse (each subschema rejects the other's properties). Declare fields inline
+  in a closed schema; don't compose it from parts.
+
+Prove enforcement with a negative test: inject a bogus key into one fixture's
+result → speccheck must fail on it; restore, all green. Without
+`additionalProperties: false` that injected key passes silently.
+
 ## Regenerate the compiled spec
 
 ```sh

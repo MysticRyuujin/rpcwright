@@ -406,3 +406,19 @@ on instead of re-investigating from scratch.
   hive-chain import limitation, not a per-method bug, so expect it on *any*
   method that reads state or receipts from an early block on the stock chain.
   Apply gotcha #0c before blaming your change.
+
+## 14. An open result schema quietly disagrees with exact-match conformance
+
+- **Symptom:** a client emits an extra field in a response (e.g. a non-consensus
+  decoration like `size`); it validates against the OpenRPC schema, yet every
+  exact-match hive test for the method is red. Or the inverse: reviewers ask
+  "what forbids extra fields?" and the honest answer is "only the fixtures."
+- **Cause:** JSON Schema objects are open by default. `required` forces presence;
+  nothing forbids extras unless the schema sets `additionalProperties: false`.
+  Ordinary hive tests exact-match geth-recorded fixtures, so they are stricter
+  than an open schema by accident, not by contract.
+- **Fix:** default new result schemas to `additionalProperties: false` so the
+  schema and the tests enforce the same contract; see "Open vs closed object
+  schemas" in `execution-apis.md` for when open is legitimate, the
+  fork-versioning cost, and the `allOf` composition trap. Prove enforcement with
+  an injected-bogus-key negative fixture test.

@@ -4,6 +4,10 @@ hive builds Docker images for clients and simulators and runs them together. The
 `rpc-compat` simulator replays execution-apis `.io` fixtures against a client and
 compares responses. Requires Docker.
 
+The schema and local-spec guidance below matches
+[Hive revision 43ea47be](https://github.com/ethereum/hive/tree/43ea47bef5761351e3da7b726050ea80ab362c52/simulators/ethereum/rpc-compat).
+Check the selected revision before relying on these features.
+
 ## Build hive
 
 ```sh
@@ -24,7 +28,7 @@ git fetch upstream master && git rev-list --count HEAD..upstream/master   # >0 �
 git grep <token> upstream/master -- clients/      # is a merged-PR feature actually present?
 ```
 
-Pull just what you need: `git checkout upstream/master -- clients/<name>/<file>`.
+Inspect the required changes before applying them. Preserve local wrapper edits.
 
 ## How rpc-compat sources tests and clients
 
@@ -48,7 +52,7 @@ Pull just what you need: `git checkout upstream/master -- clients/<name>/<file>`
   loudly, and the sim **panics at startup** if `openrpc.json` can't be loaded.
 - The sim **builds `openrpc.json` from the cloned spec source** (specgen) at image
   build time — `openrpc.json` is gitignored in execution-apis, so it is *not* in
-  the clone and cannot simply be copied. The Dockerfile runs specgen (which pulls
+  the clone. Generate it or provide a local compiled override. The Dockerfile runs specgen (which pulls
   zero go-ethereum packages, so it's cheap) with the same flags as execution-apis'
   `make build`.
 
@@ -87,13 +91,26 @@ Confirm the chain matches if you only copy a few fixtures: `cmp` the two
 `chain.rlp` files. Fixtures are only valid against the chain they were generated
 on.
 
-**Don't copy `openrpc.json` — you can't.** It's gitignored in execution-apis, and
-the sim builds it from the cloned `src/` with specgen at image-build time (see
-above). So a local *spec* change reaches `speconly` tests only by changing the
-**source the sim clones**: point the build at your execution-apis branch (the
-`branch`/`GIT_REF` build-arg) so specgen regenerates the schema from your `src/`.
-Overriding only `tests/` while the spec is cloned from a different ref leaves
-`speconly` tests validating against the old schema.
+For a local spec change, generate and copy `openrpc.json` into the simulator
+build context. Its gitignored status does not prevent Docker from copying it.
+
+```sh
+cd "$EXECapis"
+make build
+cp openrpc.json "$HIVE/simulators/ethereum/rpc-compat/openrpc.json"
+```
+
+Enable this override after the Dockerfile's specgen step:
+
+```dockerfile
+ADD openrpc.json /execution-apis/openrpc.json
+```
+
+The inspected Hive revision includes this line as a commented override.
+Check the target Dockerfile and `.dockerignore` before use. A remote spec is
+another option: `branch` supplies `GIT_REF`, and the clone URL determines which
+repository can provide that ref. A branch name alone does not select a fork.
+Keep the spec, fixtures, and chain aligned.
 
 ## Run against YOUR client built from source
 
@@ -180,8 +197,9 @@ cd $HIVE
 - Inside, the simulator uses the test-name part as a regex to pick `.io` files,
   and each sub-test name is `<method>/<case> (<client>)`.
 
-Always confirm the run actually executed tests: look for `tests=N` with `N>0` in
-the final `simulation ... finished` line.
+Confirm the intended fixture names appear for every selected client.
+The total includes `client launch` tests, so `tests > 0` does not prove fixture
+coverage. Require successful launches, the expected fixture cases, and zero failures.
 
 ## Read the results
 
@@ -193,11 +211,13 @@ grep "finished" <runlog>          # -> suites=1 tests=14 failed=0
 F=$(ls -t $HIVE/workspace/logs/*-*.json | head -1)
 jq -r '.testCases | to_entries[] | "\(.value.summaryResult.pass)\t\(.value.name)"' "$F"
 
-# failure detail: each failing case has summaryResult.log {begin,end} into the
-# simulator log named by .simLog. Or just grep the sim log:
-SIM=$(jq -r '.simLog' "$F")
-grep -n "response differs from expected" "$HIVE/workspace/logs/$SIM"
+# List the log location and byte range for each failed case:
+jq '.testCases[] | select(.summaryResult.pass == false) | {name, log: .summaryResult.log}' "$F"
 ```
+
+Use the result JSON from the current run. Per-test request and response logs
+can live under `workspace/logs/details/`, separate from `.simLog`.
+See [hivechain.md](hivechain.md) for extraction from those logs.
 
 A `response differs` block shows `-- client` (what the client returned) vs
 `++ test` (the recorded expectation). A `-32602 missing value for required

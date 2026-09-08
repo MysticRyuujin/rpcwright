@@ -12,3 +12,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate skill (frontmatter, mirror symlinks, links)
         run: bash scripts/validate.sh
+      - name: Test validator
+        run: bash scripts/test-validate.sh

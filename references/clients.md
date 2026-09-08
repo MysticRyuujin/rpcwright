@@ -1,16 +1,12 @@
 # Per-client notes: handlers, registration, builds, and PR conventions
 
-The execution-apis + hive workflow is client-agnostic. What differs per client is
-(a) where RPC handlers live, (b) **how a method is registered/exposed**, (c) how
-params/results are typed (and the optionality idiom), (d) how to build and test
-it, and (e) the repo's **PR conventions / CI gates**. This file covers all five
-so the skill serves *any* change — new method, modified params/results, error
-behavior, deprecation — not just default-to-latest.
+Use these paths and examples to locate the relevant client code. Confirm them
+in the target revision before editing. Toolchain pins, CI rules, Dockerfiles,
+and reported client limitations can change.
 
-For hive, the local-build pattern is the same everywhere: put your modified
-source where the client's `Dockerfile.local` expects it (`clients/<name>/<name>/`)
-and select `dockerfile: local`, OR build from a fork branch with
-`dockerfile: git` + `build_args: {github, tag}` (see `hive.md`).
+Inspect the selected Hive Dockerfile for the expected source directory and build
+arguments. Use `dockerfile: local` where supported, or `dockerfile: git` with the
+intended repository and revision. See [hive.md](hive.md).
 
 ## Per-client cheat sheet
 
@@ -28,48 +24,19 @@ it's on the API surface; **Besu and ethrex require an explicit registry/dispatch
 entry** — forget it and the method is "method not found" even though the handler
 compiles.
 
-## PR conventions & CI gates (what gets a PR bounced)
+## Contribution checks
 
-These are enforced by CI and/or reviewers — get them right *before* pushing:
+Read the target repository's instructions, PR template, and workflows first.
+These examples identify checks to locate; they do not override current rules.
 
-- **go-ethereum**: commit/PR title `package: imperative summary` (e.g.
-  `internal/ethapi: …`); tests expected; reviewers require a matching
-  **execution-apis spec** PR and often wait for another client + a release
-  boundary; prefer the `eth` namespace and the most general API shape.
-- **Erigon**: title `rpc:`/`rpc/jsonrpc:`; tests must exercise the new branch
-  (reviewers flag coverage gaps); strong push on execution-apis field-shape
-  compliance; spec-conformance via the external `erigontech/rpc-tests` (an
-  `RPC_VERSION` tag).
-- **Nethermind**: fill the **PR template** — reviewers flag blank templates and
-  require the **release-notes** box ticked for user-visible RPC changes; tests
-  required; return `ResultWrapper.Fail(...)` rather than throwing (the client
-  sees the `RpcErrorType` message, not the exception detail).
-- **Reth**: **conventional-commit titles** (`feat(rpc): …`); `cargo fmt` +
-  `cargo clippy` + tests are CI gates; no DCO.
-- **Besu**: **DCO sign-off on every commit** (`git commit -s`, CI-enforced);
-  **`CHANGELOG.md`** entry under `## Unreleased` — the section is *structured* and
-  reviewers point you to the exact nested heading. An RPC behavior change goes
-  under `### Breaking Changes` → as a **sub-bullet of the existing
-  `- RPC changes to enhance compatibility with other ELs` bullet** (not a new
-  top-level bullet). Note Besu files RPC behavior changes as *Breaking Changes*
-  **even when they improve cross-client compatibility** (e.g. defaulting an
-  omitted block param to `latest`). Match an adjacent sub-bullet's style:
-  one line — what changed, the affected RPCs, and a trailing PR link. A CHANGELOG-only
-  (markdown) change does **not** need `./gradlew spotlessApply` or a Gradle build
-  — spotless gates Java/license headers, not markdown. Otherwise:
-  **`./gradlew spotlessApply`** (formatting/license-header gate); add a unit test
-  *and* a JSON spec scenario under `src/test/resources/.../jsonrpc/eth/` (BySpec
-  tests).
-- **ethrex**: **conventional-commit PR titles with a required scope** — CI lints
-  the title (`.github/workflows/pr_lint_pr_title.yml`); allowed types `feat fix
-  perf refactor revert deps build ci test style chore docs`, scopes **`l1` `l2`
-  `levm`** (`requireScope: true`), e.g. `feat(l1): …`. An AI reviewer checks hex
-  formatting (quantities `{:#x}` vs 32-byte values `0x{:064x}` vs addresses
-  `{:#x}`) and `notFound → null` semantics; intentionally-skipped tests must be
-  noted in `docs/known_issues.md`.
-
-> The exact rules drift — when a title/format check fails, read the failing
-> workflow under the client's `.github/workflows/` rather than guessing.
+| Client | Check |
+| --- | --- |
+| go-ethereum | Package-prefixed title, affected tests, and any dependency on a spec proposal. |
+| Erigon | RPC package tests, internal callers, and the configured rpc-tests revision. |
+| Nethermind | PR template, release notes, regression tests, and module variants. |
+| Reth | Conventional title, formatter, clippy, and affected crate tests. |
+| Besu | DCO, current changelog sections, Spotless for Java, unit tests, and relevant BySpec scenarios. |
+| ethrex | Allowed title types and scopes, Rust checks, and documentation for known test limitations. |
 
 ## go-ethereum — Go
 
@@ -226,11 +193,9 @@ from its siblings*.
 - Build: `cargo build --release --bin reth`. Tests: `cargo test -p
   reth-rpc-eth-api` (trait-signature changes ripple to impls and tests).
 - hive: `clients/reth/` (`Dockerfile`/`Dockerfile.git`/`Dockerfile.local`).
-- **Known standing bug: cannot produce legacy (pre-Byzantium) receipts.** Any
-  raw-receipt-RLP method always encodes the Byzantium+ status byte, even for a
-  block that predates Byzantium — where the correct encoding uses the
-  pre-Byzantium 32-byte post-state root instead. See gotcha #13; don't
-  re-diagnose this as caused by whatever you're changing.
+- Historical surveys report pre-Byzantium raw receipts with a status byte where
+  the contract requires a post-state root. Reproduce on the selected revision
+  and unchanged baseline before classifying the failure. See [gotchas.md](gotchas.md).
 
 ## ethrex — Rust
 
@@ -248,10 +213,8 @@ from its siblings*.
   Add `impl Default for BlockIdentifierOrHash` returning latest —
   `BlockTag` already derives `#[default] Latest` and `BlockIdentifier` had a
   `Default`, but `BlockIdentifierOrHash` did not.
-- **ethrex did not implement `eth_getStorageValues`** (returned `-32601 method
-  not found`). It's small to add (~45 LOC): a `GetStorageValuesRequest` that
-  batches `get_storage_at` over a `map<address, slots>` at a block, with the same
-  optional-block default and a 1024-slot cap; register it in the `rpc.rs` match.
+- Check whether the target revision implements `eth_getStorageValues` before
+  planning its tests. Add a missing method only when the task includes it.
 - Build/test: cargo workspace; the RPC crate is `ethrex-rpc`. Run
   `cargo test -p ethrex-rpc --lib`.
 - **Toolchain gotcha (cost me a false "pass"):** ethrex pins Rust via
@@ -266,16 +229,10 @@ from its siblings*.
   `Dockerfile.local`). Build from a fork via `build_args: {github: <you/ethrex>,
   tag: <branch>}`; the `Dockerfile.git` `rust:latest` builder + ethrex's
   `rust-toolchain.toml` auto-fetches the pinned toolchain.
-- **Known standing bug: cannot import the hive chain past its point of pre-merge
-  support** — ethrex doesn't handle pre-merge blocks/chains, so a stock ethrex
-  serving the standard hive test chain has real gaps in its historical state (a
-  stock ethrex can return `0x0`/`null` for account state at `latest`, or `null`
-  instead of a receipts array for an early block). rpc-compat *value* fixtures
-  for state/receipt methods may fail independent of any spec change, on any
-  method that reads early-block state. See gotcha #13. Apply gotcha #0c: check
-  whether the client fails the same call with an *explicit* block before
-  blaming your change, and prove the change via the client's unit tests +
-  omitted==explicit-block equivalence rather than the fixture value.
+- Historical surveys report missing state or receipts for some blocks on the
+  Hive chain. Check import logs, the imported head, and the same request on the
+  unchanged baseline. Omitted-block equivalence proves default selection only;
+  it does not prove that the returned state is correct.
 
 ## General per-client checklist for any change
 

@@ -45,13 +45,11 @@ and `t.chain.txinfo`.
   fork at block 54. The convention is head == last-fork activation block.
 - `-lastfork` truncates the fork list; the fork must exist in `posForkNames`.
 
-## The shipped chain has EVERY fork boundary — pre-fork blocks are testable today
+## Locate blocks before and after the target fork
 
-A recurring false belief (it appeared in an erigon PR thread and in this skill's own
-notes) is that the rpc-compat chain "activates every fork at genesis, so pre-Berlin
-behavior cannot be tested." Wrong. With `-fork-interval 3` the forks land every 3
-blocks, so the chain has a real block range under every fork. Read the schedule
-from `tests/genesis.json`, not from memory; as of the bpo2 chain (head 54):
+Read the schedule from `tests/genesis.json` and the generated block timestamps.
+Do not assume every fork activates at genesis or that every fork is present.
+The bpo2 example uses a three-block interval and reaches block 54:
 
 | fork | activates at block | pre-fork range |
 |---|---|---|
@@ -71,14 +69,13 @@ its fork," pass the block **number** as the block param (`"0x14"` = block 20 is
 pre-Berlin, pre-Cancun and pre-Prague at once, with EIP-155 active). Genesis-alloc
 contracts (e.g. the storage contract at `0x7dcd17433742f4c0ca53122ab541d0ba67fc27df`,
 called with input `0x010203040506`) and `accounts.json` senders exist at every
-block, so no tx-mod lookup is needed. Caveat: ethrex cannot import the pre-London
-blocks (clients.md #13), so at these block numbers it returns `"result":null`; use
-block `"0x0"` for ethrex (see below).
+block, so no tx-mod lookup is needed. Verify the selected client's imported head
+and historical state before interpreting a missing result.
 
 ### Surveying raw client behavior with hive (no expected value needed)
 
-For a *what do the six clients actually return* question, write throwaway `.io` files
-directly into `$HIVE/simulators/ethereum/rpc-compat/tests/<method>/` with an
+For a client behavior survey, use temporary `.io` files in an isolated simulator
+test directory with an
 impossible `<<` line (e.g. `"result":"SURVEY_PLACEHOLDER"`), give them a shared name
 prefix, and run `--sim.limit "rpc-compat/<prefix>"`. Every case "fails" — that is the
 point; the raw answers are in the per-test log. The request/response pairs are NOT in
@@ -95,16 +92,13 @@ jq -r '.testCases|to_entries[]|select(.value.name|test("<prefix>"))|"\(.value.na
 done
 ```
 
-Do this BEFORE claiming any cross-client behavior from source reading. In the
-fork-gate survey (2026-09) the static traces of reth/Nethermind/Besu were confirmed
-line for line, but "confirmed" is the word you want in a public thread, not "I read
-the code." Cost: one 2-minute hive run against cached `ethpandaops/*` images.
+Use runtime results to confirm behavior inferred from source. Record client
+revisions and configuration with the responses. Keep survey fixtures outside the
+committed corpus and remove them from subsequent conformance runs.
 
-ethrex has no state at pre-London block numbers (returns `"result":null`, not an
-error), but it does hold genesis state — query block `"0x0"` for an ethrex-only
-pre-fork data point (EIP-155 is inactive there, so other clients may fail on
-signature rules first; keep the block-0 variants ethrex-only).
-
+Past ethrex surveys report missing state at early blocks while genesis queries
+succeed. Recheck this on the selected revision. A genesis query is a separate
+data point; different fork and signature rules can prevent a direct comparison.
 
 ## Bumping the chain to a new fork — the recipe
 
@@ -164,16 +158,18 @@ Precedent PRs: prague bump execution-apis #612; osaka+bpo bump (this playbook).
   Solidity `transfer()` (2300 gas stipend) started reverting `Failed to send
   Ether` because the precompile's base cost exceeds the stipend. Keep
   state-override/forward targets out of plausible precompile ranges (0x01–0x1f,
-  0x100+); the suite's 0xc0/0xc1/0xc2 scratch convention is safe.
+  0x100+). Check scratch addresses against the selected fork's precompile set;
+  no address convention guarantees compatibility with future forks.
 - **Don't commit the hivechain binary** (~17 MB). `tools/.gitignore` covers the
   other built binaries; make sure `/hivechain` is listed too.
 - **Debugging a generator failure? Run geth on the chain by hand** — faster than
   round-tripping through make fill:
   ```sh
   cd $EXECapis/tools
-  ./geth --datadir /tmp/d --state.scheme=hash init chain/genesis.json
-  ./geth --datadir /tmp/d --state.scheme=hash --gcmode archive import chain/chain.rlp
-  ./geth --datadir /tmp/d --state.scheme=hash --gcmode archive --ipcdisable \
+  debug_datadir=$(mktemp -d)
+  ./geth --datadir "$debug_datadir" --state.scheme=hash init chain/genesis.json
+  ./geth --datadir "$debug_datadir" --state.scheme=hash --gcmode archive import chain/chain.rlp
+  ./geth --datadir "$debug_datadir" --state.scheme=hash --gcmode archive --ipcdisable \
     --http --http.api eth,debug,net,txpool --http.port 18545 \
     --port 30310 --authrpc.port 18551 --nodiscover --maxpeers 0
   ```

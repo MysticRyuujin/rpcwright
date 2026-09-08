@@ -22,8 +22,8 @@ illustrates a general technique*. A work-artifact is not. Cut or generalize:
 - **Per-client info** follows the cheat-sheet shape in `references/clients.md`:
   handlers · registration · param/result idiom · build/test · CI gates. Add a new
   client as a new table row + a section in that same shape.
-- **A new change-type** is a new row in SKILL.md's "What to touch, by change type"
-  table, with the mechanics in the relevant reference file
+- **A new change-type** needs routing in SKILL.md only when existing routing does
+  not cover it. Keep the mechanics in the relevant reference file
   (`execution-apis.md` / `testgen.md` / `clients.md` / `hive.md`).
 - **Reusable traps** go in `references/gotchas.md`. The long narrative of an
   example lives in `references/worked-example.md`; other files reference it
@@ -40,9 +40,8 @@ Claude Code and Codex both load this skill, so keep it portable:
   Don't add host-specific keys.
 - Cite reference files by relative path, and don't name one tool's features or
   built-in tools in the instructions.
-- Front-load the trigger words in `description`. Codex budgets the initial skill
-  list to 2% of the context window and shortens long descriptions first, so the
-  tail is what gets cut.
+- Keep `description` concise and specific. State the task and meaningful scope
+  boundaries so the host can select the skill without loading its references.
 
 ## Mirror files
 
@@ -54,3 +53,4 @@ symlink it: `ln -sf SKILL.md <name>`.
 
 - `bash scripts/validate.sh` passes (frontmatter, mirror symlinks, link
   integrity). CI runs the same check (`.github/workflows/validate.yml`).
+- Run `bash scripts/test-validate.sh` after changing the validator.

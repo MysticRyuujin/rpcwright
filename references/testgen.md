@@ -64,20 +64,21 @@ make fill              # now builds YOUR geth and records its responses
   ```sh
   cd $EXECapis
   git status --short tests/                 # see what changed
-  git checkout -- tests/eth_simulateV1/     # revert unrelated drift
-  # keep only the new fixtures your change introduced
+  git diff -- tests/eth_simulateV1/         # inspect unrelated drift
   ```
+
+  Remove only drift introduced by this fill. Preserve pre-existing edits.
+  Restore a whole directory only when it was clean before the fill.
 
 - To regenerate just your method and avoid touching others, filter:
   `./tools/rpctestgen --bin ./tools/geth -chain ./tools/chain --out ./tests --tests 'eth_getStorageValues'`
 
 ## Determinism
 
-Fixtures are generated against the **fixed** chain in `tools/chain`. A clean
-`make fill` reproduces existing fixtures **byte-for-byte** when client behavior
-is unchanged. Therefore: any modified `.io` file represents a real behavior
-difference. Use this — regenerate, then `git status` to see exactly what your
-change altered.
+Fixtures use the fixed chain in `tools/chain`. Reproducibility also depends on
+the generator, reference client, and launch configuration. Record these inputs
+and inspect output differences. `SpecOnly` cases can vary by client or configuration;
+do not classify every changed byte as a regression.
 
 **Caveat — a fixture is only as correct as the client that generated it.** `make
 fill` records whatever the reference client (go-ethereum) returns, so a geth bug
@@ -150,18 +151,12 @@ For a brand-new method (not just a case on an existing one):
    against the method's **OpenRPC result schema**, not the exact recorded value.
    The recorded `<<` value becomes just one valid example.
 
-   **Always GENERATE a `speconly` fixture from a real client — never hand-author
-   it.** A `.io` fixture inherits the reference client's *config*, not just its
-   behavior: optional fields present in the recorded example depend on how that
-   node was launched (gcmode, state-scheme, retention windows). A hand-copied
-   fixture (e.g. lifted from a client's unit-test vectors) can encode values no
-   real node produces — an internally-inconsistent head, or a field the client
-   never emits — and it will fail replay even against the very client it was
-   copied from. The cross-client contract for a `speconly` method is the
-   **schema**, so the only thing the fixture must be is one real, schema-valid
-   example. The `eth_capabilities` generator is the canonical example: it asserts
-   only the client-agnostic part (head number/hash == chain head) in Go and lets
-   the schema cover the config-specific retention fields.
+   Generate committed `speconly` fixtures through testgen. The recorded response
+   must be a real, schema-valid example, although Hive need not reproduce it
+   exactly. The generator can assert stable properties while the schema permits
+   configuration-dependent fields. Check the target Hive implementation:
+   older revisions use structural comparison. Temporary survey or negative-test
+   fixtures are separate from the committed corpus.
 
 ## The .io fixture format
 

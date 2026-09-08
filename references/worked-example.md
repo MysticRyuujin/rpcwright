@@ -6,7 +6,8 @@ parameter optional (defaulting to `latest`) on the six state-reading methods
 `eth_getProof`, `eth_getStorageValues` — matching an execution-apis spec change
 and `eth_call`'s existing behavior.
 
-Use this as a template; substitute your own method/behavior.
+This is a historical example. Check the target revisions before adapting it.
+Use the linked references for current procedures.
 
 ## 1. Client behavior (go-ethereum)
 
@@ -60,16 +61,18 @@ go mod tidy
 make fill
 cd $EXECapis
 git status --short tests/                 # expect: new *-default-block.io files
-git checkout -- tests/eth_simulateV1/     # revert unrelated drift from a newer geth
+git diff -- tests/eth_simulateV1/         # inspect unrelated drift from a newer geth
 ```
+
+Remove only drift introduced by this fill. Preserve existing fixture edits.
 
 ## 5. Validate against the spec
 
 ```sh
 cd $EXECapis && ./tools/speccheck -v          # all passing
 # negative test (prove the required:false is load-bearing):
-# temporarily set Block required:true in openrpc.json, run speccheck --regexp,
-# confirm "missing required parameter", restore. (See execution-apis.md.)
+# Set Block required:true in a temporary spec and pass it through --spec.
+# Confirm "missing required parameter". See execution-apis.md.
 ```
 
 ## 6. hive rpc-compat
@@ -77,6 +80,8 @@ cd $EXECapis && ./tools/speccheck -v          # all passing
 ```sh
 # fixtures -> simulator (and uncomment `ADD tests /execution-apis/tests` in its Dockerfile)
 rsync -a $EXECapis/tests/ $HIVE/simulators/ethereum/rpc-compat/tests/
+# Copy the compiled local spec and enable its ADD override too.
+cp "$EXECapis/openrpc.json" "$HIVE/simulators/ethereum/rpc-compat/openrpc.json"
 # client source -> local build location
 rsync -a --delete --exclude='.git/' --exclude='build/bin/' $GETH/ $HIVE/clients/go-ethereum/go-ethereum/
 ```
@@ -96,6 +101,9 @@ cd $HIVE
 ./hive --sim ethereum/rpc-compat --client-file clients.yaml --sim.limit "rpc-compat/default-block"
 # headline: simulation ethereum/rpc-compat finished suites=1 tests=N failed=0
 ```
+
+Confirm each selected client runs the intended fixtures. Launch tests also count
+toward `tests=N`.
 
 Note the `--sim.limit` form (`rpc-compat/...`, not bare) — see `gotchas.md` #2.
 

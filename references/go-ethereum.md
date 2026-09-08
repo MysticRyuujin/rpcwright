@@ -48,31 +48,11 @@ func (api *BlockChainAPI) GetBalance(
 Return values use `hexutil` wrappers (`*hexutil.Big`, `hexutil.Bytes`,
 `*hexutil.Uint64`) so they JSON-encode as the `0x…` quantities the spec wants.
 
-## Adding a method that mirrors an existing one (refactor first, don't copy)
+## Reuse existing method logic
 
-Many RPC additions are a "companion" to an existing method — a write/`commit`
-twin of a read/`build` method, a `V2` of a `V1`, a batch form of a singular one.
-The tempting move is to copy the sibling's body and change the ends. Don't ship
-that: it's the single most common thing a geth maintainer will rewrite (real
-case: `testing_commitBlockV1`, #34995, cleaned up −69/+23). Before you write the
-second method:
-
-1. **Extract the shared body into one helper, at the layer where the duplication
-   is.** If `BuildBlockV1` and your new `CommitBlockV1` both decode txs and build
-   `BuildPayloadArgs`, that block belongs in one `api.buildTestingBlock(...)` that
-   both call — not copied into both, and not "deduped" one layer down in `miner`
-   where the duplication isn't. Put the helper where the copy-paste happened.
-2. **If two methods differ only in what they return, return the union once.** A
-   block and the `ExecutionPayloadEnvelope` derived from it are not two methods —
-   one method returns `(*types.Block, *ExecutionPayloadEnvelope, error)` and each
-   caller takes what it needs. Don't mint a second exported method per projection.
-3. **Minimize new exported symbols.** Prefer changing one existing signature over
-   adding new public API to a core package like `miner`. Every exported symbol is
-   a maintenance obligation; geth review optimizes hard for the smallest surface.
-
-Tests and hive stay green through all of this — it's a code-quality gate, not a
-correctness one — so it only gets caught at review unless you self-review the diff
-for it. See gotcha #11.
+Look for an existing helper before copying a sibling handler. If substantial
+logic is shared, consider one private helper at that layer. Preserve public
+compatibility and avoid changing unrelated signatures only to reduce duplication.
 
 ## THE key gotcha: optional trailing parameters must be pointers
 
@@ -142,27 +122,32 @@ omitted parameter — that behavior lives in the `rpc` package, not your handler
 Stand up an in-process server and call over it:
 
 ```go
-func TestStateMethodsDefaultToLatest(t *testing.T) {
-    backend := newTestBackend(t, 1, genesis, beacon.New(ethash.NewFaker()),
-        func(i int, b *core.BlockGen) { b.SetPoS() })
-
+func assertBalanceDefaultsToLatest(t *testing.T, backend Backend, addr common.Address) {
+    t.Helper()
     srv := rpc.NewServer()
-    srv.RegisterName("eth", NewBlockChainAPI(backend))
-    srv.RegisterName("eth", NewTransactionAPI(backend, new(AddrLocker)))
+    defer srv.Stop()
+    if err := srv.RegisterName("eth", NewBlockChainAPI(backend)); err != nil {
+        t.Fatal(err)
+    }
     client := rpc.DialInProc(srv)
     defer client.Close()
-
-    // Omit the block param entirely (only 1 positional arg):
+    ctx := context.Background()
     var got hexutil.Big
     if err := client.CallContext(ctx, &got, "eth_getBalance", addr); err != nil {
         t.Fatalf("omitted block: %v", err)
     }
-    // Compare to the explicit "latest" result — they must be identical.
     var want hexutil.Big
-    client.CallContext(ctx, &want, "eth_getBalance", addr, "latest")
-    // assert got == want
+    if err := client.CallContext(ctx, &want, "eth_getBalance", addr, "latest"); err != nil {
+        t.Fatalf("explicit latest: %v", err)
+    }
+    if got.ToInt().Cmp(want.ToInt()) != 0 {
+        t.Fatalf("balance mismatch: got %s, want %s", got.ToInt(), want.ToInt())
+    }
 }
 ```
+
+Call this helper from a package test with its existing backend and funded account.
+Check the target revision's constructor and backend types before copying it.
 
 `rpc.DialInProc(srv)` + `client.CallContext(ctx, dst, method, args...)` with
 fewer args is how you exercise omission. This is the highest-value test for any

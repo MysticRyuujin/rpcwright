@@ -9,8 +9,8 @@ fail=0
 if ! head -1 SKILL.md | grep -qx -- '---'; then
   echo "FAIL: SKILL.md must start with '---' frontmatter"; fail=1
 fi
-if ! awk 'NR>1 && $0=="---"{exit} /^name:/{n=1} /^description:/{d=1} END{exit !(n&&d)}' SKILL.md; then
-  echo "FAIL: SKILL.md frontmatter must include 'name:' and 'description:'"; fail=1
+if ! awk 'NR>1 && $0=="---"{closed=1; exit} /^name:/{n=1} /^description:/{d=1} END{exit !(closed&&n&&d)}' SKILL.md; then
+  echo "FAIL: SKILL.md frontmatter must include 'name:', 'description:', and a closing '---'"; fail=1
 fi
 
 # 2. AGENTS.md, CLAUDE.md, llms.txt are symlinks to SKILL.md (single source of truth,

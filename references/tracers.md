@@ -1,13 +1,13 @@
 # Tracers — spec'ing debug_trace* named-tracer output
 
-How to standardize a named tracer's output format (callTracer is the worked
-case; prestateTracer etc. would follow the same shape). Read alongside
-`execution-apis.md` (spec/build) and `testgen.md` (fixtures).
+Use this reference to standardize a named tracer's output, with callTracer as
+the example. Read [execution-apis.md](execution-apis.md) and [testgen.md](testgen.md).
+Check branch-selection code in the target revisions before assuming it exists.
 
 ## The shape of a named-tracer spec
 
-The trace methods' result schemas are an `anyOf` of branches selected by the
-request's `TraceConfig.tracer` field:
+The trace methods use `anyOf` result branches. Validators must select the relevant
+branch using the request's `TraceConfig.tracer` field:
 
 ```
 anyOf:
@@ -25,16 +25,15 @@ valid.
 
 ## Gotcha: anyOf branches are NOT enforced by default
 
-speccheck (and hive rpc-compat `speconly`) validate the result against the
-*whole* result schema. Because the escape-hatch branch is unconstrained, any
-tracer output passes — a new tracer branch is pure documentation until
-speccheck selects the branch by the request's `tracer` value.
-`tools/cmd/speccheck/tracer.go` does this (added with callTracer): it parses
-the fixture request's TraceConfig, picks the `anyOf` branch by title prefix,
-and validates against it alone. Prove enforcement with a corrupted-fixture
-negative test (delete a required field from a *nested* frame → speccheck must
-fail). hive's `rpc-compat/schema.go` still has the hole for `speconly` tests —
-exact-match tests are the real cross-client enforcement there.
+Validation against the whole result schema accepts arbitrary tracer output when
+an unconstrained branch is present. Each validator must select the intended
+branch using the request's tracer value to enforce its constraints.
+Inspect `tools/cmd/speccheck/tracer.go` and Hive's `rpc-compat/schema.go` for
+`tracerBranchTitles` and request-based selection. Some revisions lack the
+speccheck selector; Hive revisions with `methodSchemas.forRequest` already select
+known tracer branches. Add or extend selection where needed in each validator.
+Prove enforcement by removing a required field from a nested frame in temporary
+test data. Both validators must reject it when they claim tracer-schema coverage.
 
 ## Gotcha: recursive schemas vs specgen
 
@@ -70,6 +69,10 @@ through `openrpc.JSONSchemaObject` twice; work on raw `map[string]any` after
 the first marshal (this is why speccheck's `validateRaw` exists).
 
 ## callTracer reference facts (verified July 2026, raw over SSH)
+
+The following observations describe that survey, not all future releases.
+Reproduce relevant differences on the target revisions before treating them as
+current behavior. The approved spec takes precedence over the reference client.
 
 geth `eth/tracers/native/call.go` is the de-facto reference. Wire format:
 `type/from/gas/gasUsed/input` always present (`input` = `"0x"` when empty);
@@ -110,10 +113,13 @@ repo); ethrex `crates/vm/backends/levm/tracing.rs` + `crates/common/tracing.rs`.
 
 ## Comparing tracer output across clients
 
-Use the fork MysticRyuujin/ethereum-trace-compare: `compare_traces.py
+If available, use MysticRyuujin/ethereum-trace-compare: `compare_traces.py
 --tracer calltracer --methods tx,block,call-replay --configs
 default,onlyTopCall,withLog,onlyTopCallWithLog`, then
 `aggregate_calltracer.py <traces-dir>` for the divergence matrix.
+Check those scripts and their flags in the selected checkout. If unavailable,
+send the same requests directly to each node and save the raw responses with
+client versions and configuration. The helper repository is optional.
 
 **Never compare through a caching/normalizing proxy (eRPC).** eRPC caches
 `debug_trace*` responses in a memory cache shared across upstreams — the

@@ -23,8 +23,7 @@ rediscover them the slow way.
 
 ## What's inside
 
-- [`SKILL.md`](SKILL.md) — the mental model, the golden-path recipe, and the
-  gotchas that cost hours.
+- [`SKILL.md`](SKILL.md): scope, reference selection, workflow, and validation requirements.
 - [`references/go-ethereum.md`](references/go-ethereum.md) — build, test, RPC
   method & optional-parameter patterns, in-process RPC test harness.
 - [`references/execution-apis.md`](references/execution-apis.md) — OpenRPC YAML,
@@ -34,9 +33,11 @@ rediscover them the slow way.
 - [`references/hive.md`](references/hive.md) — the `rpc-compat` simulator,
   local fixtures, building clients from source, client-files, the `--sim.limit`
   trap, reading results.
-- [`references/clients.md`](references/clients.md) — per-client handler
-  locations and local-build notes (go-ethereum & Nethermind verified; Besu,
-  Erigon, Reth, ethrex guidance).
+- [`references/clients.md`](references/clients.md): handler locations, registration,
+  build examples, and contribution checks for six clients.
+- [`references/hivechain.md`](references/hivechain.md): chain generation, fork
+  configuration, and behavior surveys.
+- [`references/tracers.md`](references/tracers.md): named-tracer schemas and validation.
 - [`references/gotchas.md`](references/gotchas.md) — the full catalog.
 - [`references/worked-example.md`](references/worked-example.md) — a complete
   change end to end (default an omitted block param to `latest`), including a
@@ -80,10 +81,9 @@ vendors rpcwright at its root also picks it up as plain project instructions.
 
 ## Scope
 
-The execution-apis + testgen + hive workflow is client-agnostic. The
-client-specific guidance is **verified** for go-ethereum and Nethermind and is
-**best-effort guidance** for Besu, Erigon, Reth, and ethrex — contributions to
-verify and extend those are welcome.
+The skill covers changes and reviews across six execution clients, execution-apis,
+testgen, and Hive. Use only the stages required by the task.
+Confirm paths, toolchain pins, and historical observations against the selected revisions.
 
 ## License
 

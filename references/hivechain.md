@@ -45,6 +45,67 @@ and `t.chain.txinfo`.
   fork at block 54. The convention is head == last-fork activation block.
 - `-lastfork` truncates the fork list; the fork must exist in `posForkNames`.
 
+## The shipped chain has EVERY fork boundary — pre-fork blocks are testable today
+
+A recurring false belief (it appeared in an erigon PR thread and in this skill's own
+notes) is that the rpc-compat chain "activates every fork at genesis, so pre-Berlin
+behavior cannot be tested." Wrong. With `-fork-interval 3` the forks land every 3
+blocks, so the chain has a real block range under every fork. Read the schedule
+from `tests/genesis.json`, not from memory; as of the bpo2 chain (head 54):
+
+| fork | activates at block | pre-fork range |
+|---|---|---|
+| eip150 / eip155+158 | 3 / 6 | 0-2 / 3-5 |
+| byzantium / constantinople / petersburg | 9 / 12 / 15 | |
+| istanbul / muirGlacier | 18 / 21 | |
+| **berlin** (EIP-2929/2930) | **24** | **6-23** (EIP-155 active, so signatures validate) |
+| london | 27 | 24-26 |
+| arrowGlacier / grayGlacier / mergeNetsplit | 30 / 33 / 36 | |
+| shanghai (t=390) | 39 | |
+| **cancun** (t=420, EIP-4844) | **42** | 39-41 |
+| **prague** (t=450, EIP-7702) | **45** | 42-44 |
+| osaka / bpo1 / bpo2 (t=480/510/540) | 48 / 51 / 54 | |
+
+Timestamp forks: block N has timestamp N*10. To exercise "field X at a block before
+its fork," pass the block **number** as the block param (`"0x14"` = block 20 is
+pre-Berlin, pre-Cancun and pre-Prague at once, with EIP-155 active). Genesis-alloc
+contracts (e.g. the storage contract at `0x7dcd17433742f4c0ca53122ab541d0ba67fc27df`,
+called with input `0x010203040506`) and `accounts.json` senders exist at every
+block, so no tx-mod lookup is needed. Caveat: ethrex cannot import the pre-London
+blocks (clients.md #13), so at these block numbers it returns `"result":null`; use
+block `"0x0"` for ethrex (see below).
+
+### Surveying raw client behavior with hive (no expected value needed)
+
+For a *what do the six clients actually return* question, write throwaway `.io` files
+directly into `$HIVE/simulators/ethereum/rpc-compat/tests/<method>/` with an
+impossible `<<` line (e.g. `"result":"SURVEY_PLACEHOLDER"`), give them a shared name
+prefix, and run `--sim.limit "rpc-compat/<prefix>"`. Every case "fails" — that is the
+point; the raw answers are in the per-test log. The request/response pairs are NOT in
+the simulator log; they live in `workspace/logs/details/<sim-id>-0.log`, addressed by
+byte offsets from the results JSON (`summaryResult.log.{begin,end}`), as `>> ` / `<< `
+lines:
+
+```sh
+cd $HIVE; F=$(ls -t workspace/logs/*-*.json | head -1)
+D=workspace/logs/details/$(basename $(jq -r .simLog $F) .log | sed "s/-simulator-/-/")-0.log
+jq -r '.testCases|to_entries[]|select(.value.name|test("<prefix>"))|"\(.value.name)\t\(.value.summaryResult.log.begin)\t\(.value.summaryResult.log.end)"' $F \
+| sort | while IFS=$'\t' read -r name b e; do
+  printf '%s\t%s\n' "$name" "$(tail -c +$((b+1)) $D | head -c $((e-b)) | sed 's/\x1b\[[0-9;]*m//g' | grep -a -m1 '^<<' | sed 's/^<< *//')"
+done
+```
+
+Do this BEFORE claiming any cross-client behavior from source reading. In the
+fork-gate survey (2026-09) the static traces of reth/Nethermind/Besu were confirmed
+line for line, but "confirmed" is the word you want in a public thread, not "I read
+the code." Cost: one 2-minute hive run against cached `ethpandaops/*` images.
+
+ethrex has no state at pre-London block numbers (returns `"result":null`, not an
+error), but it does hold genesis state — query block `"0x0"` for an ethrex-only
+pre-fork data point (EIP-155 is inactive there, so other clients may fail on
+signature rules first; keep the block-0 variants ethrex-only).
+
+
 ## Bumping the chain to a new fork — the recipe
 
 1. **hivechain (hive repo):** a new fork needs BOTH ends:

@@ -31,9 +31,9 @@ Git status, revisions, Makefiles, and toolchain pins. Set these paths to the
 actual checkouts:
 
 ```sh
-export GETH=~/code/go-ethereum
-export EXECapis=~/code/execution-apis
-export HIVE=~/code/hive
+export GETH=/path/to/go-ethereum
+export EXECapis=/path/to/execution-apis
+export HIVE=/path/to/hive
 ```
 
 Reference paths and historical failures are starting points. Confirm them in the

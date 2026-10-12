@@ -3,6 +3,7 @@
 Use this reference to standardize a named tracer's output, with callTracer as
 the example. Read [execution-apis.md](execution-apis.md) and [testgen.md](testgen.md).
 Check branch-selection code in the target revisions before assuming it exists.
+For the Parity-style `trace_*` namespace, read [trace-namespace.md](trace-namespace.md).
 
 ## The shape of a named-tracer spec
 

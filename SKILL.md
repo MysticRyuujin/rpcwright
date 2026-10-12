@@ -3,8 +3,9 @@ name: rpcwright
 description: >-
   Implement, review, and conformance-test Ethereum execution-layer JSON-RPC
   changes across clients, execution-apis OpenRPC schemas, testgen/rpctestgen,
-  speccheck, and Hive rpc-compat. Use for eth_*, debug_*, txpool_*, or testing_*
-  API behavior, .io fixtures, named-tracer schemas, and test-chain fork changes.
+  speccheck, and Hive rpc-compat. Use for eth_*, debug_*, trace_*, txpool_*, or
+  testing_* API behavior, .io fixtures, named-tracer schemas, and test-chain
+  fork changes.
   Excludes ordinary RPC consumption and consensus-layer Beacon APIs.
 ---
 
@@ -50,6 +51,7 @@ build overrides. Use an isolated checkout when cleanup would otherwise be ambigu
 | Run fixtures across clients or diagnose Hive failures | [hive.md](references/hive.md) |
 | Change the chain or test behavior before a fork | [hivechain.md](references/hivechain.md) |
 | Standardize named-tracer output | [tracers.md](references/tracers.md), then the spec and fixture references |
+| Align or spec Parity-style `trace_*` methods | [trace-namespace.md](references/trace-namespace.md) |
 | Investigate a specific failure | Search [gotchas.md](references/gotchas.md) for the symptom |
 | Follow an example across repositories | [worked-example.md](references/worked-example.md) |
 

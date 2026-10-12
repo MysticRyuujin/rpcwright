@@ -38,6 +38,8 @@ rediscover them the slow way.
 - [`references/hivechain.md`](references/hivechain.md): chain generation, fork
   configuration, and behavior surveys.
 - [`references/tracers.md`](references/tracers.md): named-tracer schemas and validation.
+- [`references/trace-namespace.md`](references/trace-namespace.md): the `trace_*`
+  draft spec, decision ledger, and cross-client evidence (work in progress).
 - [`references/gotchas.md`](references/gotchas.md) — the full catalog.
 - [`references/worked-example.md`](references/worked-example.md) — a complete
   change end to end (default an omitted block param to `latest`), including a

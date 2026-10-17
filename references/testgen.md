@@ -146,26 +146,71 @@ For a brand-new method (not just a case on an existing one):
 3. `make fill` then creates `tests/eth_getThing/<case>.io` automatically — the
    `--out` dir + the method name + each `Test.Name`. No `mkdir` needed; the
    `About` text becomes the `.io` comment header (hive's test description).
-4. Set `SpecOnly: true` on a `Test` when the result isn't deterministic or is
-   client/config-specific — both speccheck and hive then validate the response
-   against the method's **OpenRPC result schema**, not the exact recorded value.
-   The recorded `<<` value becomes just one valid example.
+4. Set `SpecOnly: true` on a `Test` only when the spec lets the value vary by
+   client or configuration (a gas estimate, a fee suggestion, free-text error
+   text). A client that differs on a defined value has a bug; it is not a reason
+   for `SpecOnly`. A `speconly` response skips the exact comparison and gets
+   schema validation plus the test's validation script, if any. The recorded
+   `<<` value becomes the reference that the script compares against.
 
    Generate committed `speconly` fixtures through testgen. The recorded response
-   must be a real, schema-valid example, although Hive need not reproduce it
-   exactly. The generator can assert stable properties while the schema permits
-   configuration-dependent fields. Check the target Hive implementation:
-   older revisions use structural comparison. Temporary survey or negative-test
-   fixtures are separate from the committed corpus.
+   must be a real, schema-valid example. The generator can assert stable
+   properties at fill time, but those assertions run only against the reference
+   client. Put the checks that every client must pass in a validation script.
+   Temporary survey or negative-test fixtures are separate from the committed corpus.
 
 ## The .io fixture format
 
 ```
 // free-text comment becomes the hive test description
-// speconly:   <- marker: response validated against the OpenRPC result SCHEMA, not exact value
+// speconly:   <- marker: no exact comparison; schema validation plus the script, if any
 >> {"jsonrpc":"2.0","id":1,"method":"eth_getBalance","params":["0x7dcd...df"]}
 << {"jsonrpc":"2.0","id":1,"result":"0x56"}
 ```
 
 `>>` is a request, `<<` the recorded response. An omitted-param fixture simply
 has fewer entries in `params`. hive replays these verbatim.
+
+A line with only `--` starts an optional validation script. The rest of the
+file is JavaScript.
+
+## Validation scripts
+
+Set `ValidationScript` on a `Test`, or call `t.SetValidationScript(src)` from
+`Run` when the script needs values known only at fill time. rpctestgen writes it
+after the `--` line. Keep the source in one Go constant or builder when several
+tests share it, so every fixture gets the same check.
+
+The script runs after the message exchange, in speccheck and in Hive. A thrown
+exception fails the test. It sees:
+
+- `messages[i].send`: the parsed request, for `>>` lines.
+- `messages[i].expected`: the recorded response, for `<<` lines.
+- `messages[i].response`: the server response, for `<<` lines. speccheck has no
+  server, so it passes the recorded response here too.
+- `openrpc.validate(pointer, value)` throws when `value` does not match the
+  schema at `pointer` in `refs-openrpc.json`, e.g.
+  `#/components/schemas/CallFrame`. `openrpc.isValid` returns a boolean.
+- `console.log` output goes to the test log.
+
+Patterns, strongest first:
+
+- **Masked comparison:** for a `speconly` test, compare the full response with
+  `expected`. Before the comparison, clear only the values that the spec leaves to
+  the client. The script stays the same size as the fixture grows. Compare
+  objects key by key, not with `JSON.stringify`, because key order varies by client.
+- **Property check:** assert a bound when no exact value exists, e.g. a gas
+  estimate above the intrinsic cost.
+- **Schema branch:** when a result schema is an `anyOf` with a permissive
+  branch, validate the specific component. Exact fixtures can use this too. It
+  makes speccheck catch a fixture that no longer matches the schema.
+
+Skip the result check when the recorded response is an error. `openrpc.validate`
+throws on an undefined `result`. A script that loops over `messages` must
+validate only the responses to the method it targets. A fixture can include a
+helper call, such as a receipt lookup.
+
+Test a comparison script in Go: load the fixture with `iofile.Load`, change one
+value in the response, and call `RunScript`. A stub spec from `spec.LoadString`
+with permissive components is enough when the test covers the comparison only.
+Check that values the spec defines fail and that masked values pass.

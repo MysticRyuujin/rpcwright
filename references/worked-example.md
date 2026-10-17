@@ -81,7 +81,7 @@ cd $EXECapis && ./tools/speccheck -v          # all passing
 # fixtures -> simulator (and uncomment `ADD tests /execution-apis/tests` in its Dockerfile)
 rsync -a $EXECapis/tests/ $HIVE/simulators/ethereum/rpc-compat/tests/
 # Copy the compiled local spec and enable its ADD override too.
-cp "$EXECapis/openrpc.json" "$HIVE/simulators/ethereum/rpc-compat/openrpc.json"
+cp "$EXECapis/refs-openrpc.json" "$HIVE/simulators/ethereum/rpc-compat/refs-openrpc.json"
 # client source -> local build location
 rsync -a --delete --exclude='.git/' --exclude='build/bin/' $GETH/ $HIVE/clients/go-ethereum/go-ethereum/
 ```

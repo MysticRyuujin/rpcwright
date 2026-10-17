@@ -2,13 +2,13 @@
 
 Use this reference to standardize a named tracer's output, with callTracer as
 the example. Read [execution-apis.md](execution-apis.md) and [testgen.md](testgen.md).
-Check branch-selection code in the target revisions before assuming it exists.
+Check that each tracer fixture has a validation script before relying on schema coverage.
 For the Parity-style `trace_*` namespace, read [trace-namespace.md](trace-namespace.md).
 
 ## The shape of a named-tracer spec
 
-The trace methods use `anyOf` result branches. Validators must select the relevant
-branch using the request's `TraceConfig.tracer` field:
+The trace methods use `anyOf` result branches, one per tracer selected by the
+request's `TraceConfig.tracer` field:
 
 ```
 anyOf:
@@ -19,22 +19,30 @@ anyOf:
 
 Spec'ing a new tracer = add a schema file in `src/schemas/`, add a titled
 branch to each method's `anyOf` (block methods: under `items.anyOf`, using a
-`<Tracer>BlockEntry` `{txHash, result?, error?}` wrapper), and teach
-speccheck's branch selection about it (`tools/cmd/speccheck/tracer.go`
-`tracerBranchTitles`). Keep the escape-hatch branch — other tracers must stay
-valid.
+`<Tracer>BlockEntry` `{txHash, result?, error?}` wrapper), and give every
+fixture of that tracer a validation script. Keep the escape-hatch branch: other
+tracers must stay valid.
 
 ## Gotcha: anyOf branches are NOT enforced by default
 
-Validation against the whole result schema accepts arbitrary tracer output when
-an unconstrained branch is present. Each validator must select the intended
-branch using the request's tracer value to enforce its constraints.
-Inspect `tools/cmd/speccheck/tracer.go` and Hive's `rpc-compat/schema.go` for
-`tracerBranchTitles` and request-based selection. Some revisions lack the
-speccheck selector; Hive revisions with `methodSchemas.forRequest` already select
-known tracer branches. Add or extend selection where needed in each validator.
-Prove enforcement by removing a required field from a nested frame in temporary
-test data. Both validators must reject it when they claim tracer-schema coverage.
+Validation against the whole result schema accepts any tracer output, because
+the escape-hatch branch accepts any value. speccheck and Hive validate against
+the whole method schema. The tracer schema is enforced only when the fixture's
+script calls `openrpc.validate` with the tracer component, e.g.
+`#/components/schemas/CallFrame` (block methods: each entry against the
+`BlockEntry` component). Give exact fixtures this script too, so speccheck
+catches a recorded fixture that no longer matches the schema.
+
+For a `speconly` tracer fixture, also compare the response with the recorded one
+and clear only the values the spec leaves free. For callTracer these are the
+`error` text of frames that did not halt on REVERT, the `revertReason` text of a
+`Panic(uint256)`, and a block entry's `error` text. Before you add a free value
+to the mask, find the spec sentence that permits it. A value the spec does not
+define is a spec gap. Survey the clients and add a rule. Do not mask it.
+
+Prove enforcement two ways. Remove a required field from a nested frame in a
+temporary copy of the fixtures; speccheck must reject it. Then change a defined
+value in a response passed to `RunScript`; the comparison must reject it.
 
 ## Gotcha: recursive schemas vs specgen
 
@@ -67,7 +75,7 @@ compiled method document.
 are not inverses: re-marshaling an already-normalized `"type": ["object"]`
 produces `[["object"]]` — invalid schema JSON. Never round-trip a schema
 through `openrpc.JSONSchemaObject` twice; work on raw `map[string]any` after
-the first marshal (this is why speccheck's `validateRaw` exists).
+the first marshal.
 
 ## callTracer reference facts (verified July 2026, raw over SSH)
 
@@ -96,8 +104,8 @@ MysticRyuujin/ethereum-trace-compare `investigations/2026-07-calltracer/`):
   target; `output` missing on some frames; callLog lacks `index`.
 - **geth/erigon/reth**: agree on everything except callLog `index`/`position`
   — geth block-global, erigon/reth tx-local, and all three shift under
-  `onlyTopCall`. Un-spec-able as-is; the spec leaves `index` optional and
-  semantically undefined.
+  `onlyTopCall`. The spec requires `index` to equal the receipt
+  `logIndex`; check the spec before relying on this survey.
 - **reth (revm-inspectors)**: keeps logs on reverted frames.
 - **erigon**: extra `includePrecompiles` config (default true); validates fee
   cap vs base fee in `debug_traceCall` where others don't.

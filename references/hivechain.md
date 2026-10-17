@@ -144,15 +144,15 @@ Precedent PRs: prague bump execution-apis #612; osaka+bpo bump (this playbook).
 - **A mod can blow up fixture size — and the rpc-compat loader.**
   `tx-largereceipt` deliberately builds a block with >10 MB of receipt logs (for
   hive's own stress suites). Filled through `eth_getLogs/no-topics` it produced a
-  **21 MB single-line fixture**, and rpc-compat's `.io` loader (bufio.Scanner,
-  1 MiB buffer in `testload.go`) fails the whole run at load time:
+  **21 MB single-line fixture**. The `.io` loader (`iofile`, bufio.Scanner) has a
+  maximum line length; a longer line fails the whole run at load time:
   `failed to load tests: invalid test no-topics.io: bufio.Scanner: token too
   long` — reported under the *client launch* test even though the client started
-  fine. Exclude bulk mods with `-disable-txmods tx-largereceipt` (flag added for
+  fine. Check `maxLineLength` in `tools/iofile/load.go` for the current limit. Exclude bulk mods with `-disable-txmods tx-largereceipt` (flag added for
   exactly this; mods have no other opt-out — all registered mods always run).
   After any regen: `du -sh tests/` and check the longest line
   (`awk '{print length}' tests/**/*.io | sort -rn | head -1`) stays well under
-  1 MiB.
+  that limit.
 - **A new fork can turn a test's scratch address into a precompile.** Osaka's
   P256VERIFY landed at 0x100; a simulateV1 fixture forwarding ETH there via
   Solidity `transfer()` (2300 gas stipend) started reverting `Failed to send

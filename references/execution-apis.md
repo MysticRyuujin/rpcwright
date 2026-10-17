@@ -74,8 +74,9 @@ A method is a full OpenRPC object under `src/<namespace>/<file>.yaml`:
   (or its referenced component). speccheck validates each fixture's `result`
   against this schema, so a too-loose schema lets wrong shapes through and a
   too-strict one rejects valid output.
-- speccheck skips result validation for error responses, after validating parameters.
-  A case name containing `invalid` skips both parameter and result validation.
+- For an error response, speccheck checks the error code instead of the result.
+  The code must be declared for the method or be a standard JSON-RPC code.
+  A case name containing `invalid` skips parameter validation.
   Use that convention for deliberately invalid requests, not every error case.
   Hive checks error codes and other retained fields, but redacts error messages
   when both responses contain errors. Add a client assertion when error text matters.
@@ -122,7 +123,7 @@ cd $EXECapis
 make build
 # runs specgen twice:
 #   ./tools/specgen -o refs-openrpc.json ...        (with $ref links)
-#   ./tools/specgen -o openrpc.json -deref ...       (dereferenced — speccheck uses this)
+#   ./tools/specgen -o openrpc.json -deref ...       (dereferenced)
 ```
 
 `openrpc.json` and `refs-openrpc.json` are **build artifacts and gitignored** —
@@ -142,13 +143,14 @@ jq -r '.methods[] | select(.name=="eth_getBalance").params[] | select(.name=="Bl
 cd $EXECapis
 ./tools/speccheck -v                              # all fixtures
 ./tools/speccheck --regexp 'default-block'        # only matching tests
-# flags: --spec openrpc.json  --tests tests  --regexp <re>
+# flags: --spec refs-openrpc.json  --tests tests  --regexp <re>
 ```
 
-What speccheck actually checks (`tools/cmd/speccheck/check.go`):
+What speccheck actually checks. It loads fixtures with `tools/iofile` and checks
+messages with `tools/spec` (`check.go`), the same packages that Hive uses.
 
 These rules match
-[execution-apis revision 6570b550](https://github.com/ethereum/execution-apis/blob/6570b550090c53cc44d7a498da8415dd72bc850d/tools/cmd/speccheck/check.go).
+[execution-apis revision 076c0f1c](https://github.com/ethereum/execution-apis/blob/076c0f1c4923280a700f5f05ef4b0ed237382621/tools/spec/check.go).
 Recheck exclusions when the validator changes.
 
 - The request's params count must be `<=` the method's declared params.
@@ -156,8 +158,11 @@ Recheck exclusions when the validator changes.
   param is `required: false`. Otherwise → `missing required parameter
   <method>.param[N]`.
 - Each present param value validates against its schema.
-- The result validates against the result schema, except for error responses.
-- Names containing `invalid` skip both parameter and result validation after method lookup.
+- The result validates against the result schema. An error response gets the
+  error-code check instead.
+- Names containing `invalid` skip parameter validation after method lookup.
+- The validation script runs last. speccheck passes the recorded responses as
+  both `expected` and `response`, so a comparison script always matches here.
 
 This is why a spec change to `required: false` is load-bearing: it's the only
 thing that lets an omitted-param fixture pass speccheck.
@@ -170,7 +175,7 @@ Confirm enforcement so you know the test isn't vacuously green:
 cd $EXECapis
 negative_spec=$(mktemp)
 jq '(.methods[] | select(.name=="eth_getBalance") | .params[] |
-  select(.name=="Block") | .required) = true' openrpc.json > "$negative_spec"
+  select(.name=="Block") | .required) = true' refs-openrpc.json > "$negative_spec"
 ./tools/speccheck --spec "$negative_spec" --regexp 'get-balance-default-block'
 # Expect a nonzero exit and "missing required parameter eth_getBalance.param[1]".
 rm "$negative_spec"

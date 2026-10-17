@@ -82,16 +82,18 @@ stays the same. A local geth `go.mod` replace selects the reference build for
 | Deprecation | Mark the method deprecated and document its replacement. Preserve support and tests unless removal is requested. |
 | Removal | Remove the handler, registration, spec entry, and affected cases when removal is in scope. |
 | Chain fork | Generate the chain through hivechain; verify genesis, fork environment variables, and client mappings agree. |
-| Named tracer | Check branch selection in both validators; an unconstrained `anyOf` branch can bypass the intended schema. |
+| Named tracer | Give each tracer fixture a validation script that validates the tracer's own schema. The method's `anyOf` has a branch that accepts any value. |
 
 ## Validation rules
 
 - **Client tests:** A Hive run does not replace the client's tests. Build and test affected modules and signature callers.
 - **RPC decoding:** Test the exact changed request. Passing an explicit block does not test an omitted block.
 - **Schema enforcement:** For a changed constraint, use a temporary invalid spec or fixture and confirm rejection.
-- **speccheck exclusions:** Names containing `invalid` skip parameter and result validation. Error responses otherwise skip result validation.
+- **speccheck exclusions:** Names containing `invalid` skip parameter validation. Error responses get an error-code check instead of result validation.
 - **Fixture comparison:** Ordinary Hive tests compare recorded responses. Inspect error-message redaction before claiming error-text coverage.
-- **Spec-only tests:** Verify the target Hive revision validates against OpenRPC. Older versions compare structure instead.
+- **Test strength:** Prefer an exact fixture. Use `speconly` only for values the spec leaves to the client. Then add a script that compares the rest of the response with the recorded one. A schema-only check is the last choice. When a client differs on a defined value, fix the client; do not loosen the test.
+- **Validation scripts:** speccheck runs a script with the recorded response as both `expected` and `response`. Test a comparison script with a changed response, not a changed fixture.
+- **Spec-only tests:** Confirm which response the target Hive revision gives to schema validation. It must be the client response, not the recorded one.
 - **Build inputs:** Supply the local compiled spec as well as local fixtures when testing an unpublished schema change.
 - **Test selection:** Use `--sim.limit 'rpc-compat/<test-regex>'`. Confirm the intended fixture cases run for every selected client.
 - **Test counts:** `tests > 0` is insufficient because launch tests also count. Check fixture names, launch results, and failures.

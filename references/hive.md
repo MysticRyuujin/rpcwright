@@ -4,9 +4,11 @@ hive builds Docker images for clients and simulators and runs them together. The
 `rpc-compat` simulator replays execution-apis `.io` fixtures against a client and
 compares responses. Requires Docker.
 
-The schema and local-spec guidance below matches
-[Hive revision 43ea47be](https://github.com/ethereum/hive/tree/43ea47bef5761351e3da7b726050ea80ab362c52/simulators/ethereum/rpc-compat).
-Check the selected revision before relying on these features.
+The runner guidance below is based on
+[Hive revision 14d57b16](https://github.com/ethereum/hive/tree/14d57b1664cc832381ab12b62033b9f22e047957/simulators/ethereum/rpc-compat).
+That revision gives the spec checker the recorded `<<` line, not the client
+response; see the "Every test" item below. Check the selected revision before
+relying on these features.
 
 ## Build hive
 
@@ -35,39 +37,36 @@ Inspect the required changes before applying them. Preserve local wrapper edits.
 `simulators/ethereum/rpc-compat/`:
 
 - `Dockerfile` clones execution-apis at a git ref (`ARG branch=main`,
-  `ENV GIT_REF`), copies its `tests/` into the image, and **builds `openrpc.json`
-  from the cloned `src/` with specgen** so `speconly` tests can be validated
-  against the spec — see below.
-- `main.go` + `testload.go` load every `.io` file under `tests/` and replay it.
-- **For an ordinary test it does NOT consult the OpenRPC spec.** It compares the
-  client response to the recorded `<<` response with `jsondiff` (exact match).
-  Error messages are redacted from the comparison **only** when both expected and
-  actual are errors.
-- **For a `speconly:` test it validates the result against the method's OpenRPC
-  result schema** (the same `santhosh-tekuri/jsonschema` validation speccheck
-  does), not against the recorded `<<` value. So any spec-valid response passes,
-  regardless of which *optional* fields a given client/config includes. The
-  recorded `<<` value is then just one illustrative example. There is **no
-  structural fallback** — a `speconly` method missing from the spec fails the test
-  loudly, and the sim **panics at startup** if `openrpc.json` can't be loaded.
-- The sim **builds `openrpc.json` from the cloned spec source** (specgen) at image
-  build time — `openrpc.json` is gitignored in execution-apis, so it is *not* in
-  the clone. Generate it or provide a local compiled override. The Dockerfile runs specgen (which pulls
-  zero go-ethereum packages, so it's cheap) with the same flags as execution-apis'
-  `make build`.
+  `ENV GIT_REF`), runs `make build` there, and copies `tests/` and
+  `refs-openrpc.json` into the image. `refs-openrpc.json` is a build artifact
+  and gitignored in execution-apis, so the clone does not contain it.
+- `main.go` loads fixtures and runs scripts with the `iofile` package, and checks
+  messages with the `spec` package. Both come from the execution-apis `tools`
+  module that the simulator's `go.mod` pins. A change to those packages reaches
+  Hive only after that pin moves.
+- **Every test:** a spec checker validates each request and response against the
+  OpenRPC method. Request errors are only logged. Confirm that the runner gives
+  the checker the client response, not the recorded `<<` line. If it gives the
+  recorded line, no client response is schema-checked.
+- **Ordinary test:** the client response must equal the recorded `<<` response
+  (`jsondiff`). Error messages are redacted from the comparison **only** when
+  both expected and actual are errors, including nested `error` objects.
+- **`speconly:` test:** the exact comparison is skipped when the client returns
+  a result. Schema validation and the script remain. An error response is still
+  compared with the recorded one.
+- **Validation script:** after the exchange, the runner runs the script with the
+  client responses. A thrown exception fails the test. A `speconly` test without
+  a script checks only the schema, so a permissive `anyOf` branch can make it
+  pass with any value. See [testgen.md](testgen.md#validation-scripts).
 
 > Historical note / gotcha: `speconly` used to be a *structural* diff against the
-> recorded `<<` example — it rejected both **missing** keys and **unexpected**
-> keys. That is too strict for any method whose response shape is client- or
-> config-dependent (e.g. `eth_capabilities`, whose `oldestBlock`/`deleteStrategy`
-> fields appear or not depending on gcmode/state-scheme/retention). The fix made
-> `speconly` mean "valid per the OpenRPC schema" (hive #1531). If you hit a
-> `speconly` failure like `unexpected key in response` / `missing key`, you are on
-> an old hive that still does the structural diff — update it.
+> recorded `<<` example. It rejected both **missing** and **unexpected** keys.
+> If you hit a `speconly` failure like `unexpected key in response` /
+> `missing key`, you are on an old hive. Update it.
 
 So: an ordinary test is changed via the `.io` fixtures (and the client); a
-`speconly` test is governed by the **OpenRPC schema** in `src/` — fix the spec,
-and the sim regenerates `openrpc.json` from source on its next image build.
+`speconly` test is governed by the **OpenRPC schema** in `src/` and its script.
+The sim regenerates `refs-openrpc.json` from source on its next image build.
 
 ## Run against LOCAL fixtures (your modified tests)
 
@@ -91,19 +90,21 @@ Confirm the chain matches if you only copy a few fixtures: `cmp` the two
 `chain.rlp` files. Fixtures are only valid against the chain they were generated
 on.
 
-For a local spec change, generate and copy `openrpc.json` into the simulator
-build context. Its gitignored status does not prevent Docker from copying it.
+For a local spec change, generate and copy `refs-openrpc.json` into the
+simulator build context. Its gitignored status does not prevent Docker from
+copying it. Fixtures that use a new method or component fail against a spec
+built from the default ref.
 
 ```sh
 cd "$EXECapis"
 make build
-cp openrpc.json "$HIVE/simulators/ethereum/rpc-compat/openrpc.json"
+cp refs-openrpc.json "$HIVE/simulators/ethereum/rpc-compat/refs-openrpc.json"
 ```
 
-Enable this override after the Dockerfile's specgen step:
+Enable this override after the Dockerfile's `make build` step:
 
 ```dockerfile
-ADD openrpc.json /execution-apis/openrpc.json
+ADD refs-openrpc.json /execution-apis/refs-openrpc.json
 ```
 
 The inspected Hive revision includes this line as a commented override.

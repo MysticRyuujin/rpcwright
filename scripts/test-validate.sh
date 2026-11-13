@@ -23,4 +23,12 @@ if bash "$test_dir/scripts/validate.sh" > "$test_dir/result" 2>&1; then
   exit 1
 fi
 grep -q "closing '---'" "$test_dir/result"
+
+printf -- '---\nname: rpcwright\ndescription: Validate Ethereum JSON-RPC changes.\n---\n' > "$test_dir/SKILL.md"
+for _ in $(seq 1 220); do echo "line" >> "$test_dir/SKILL.md"; done
+if bash "$test_dir/scripts/validate.sh" > "$test_dir/result" 2>&1; then
+  echo "FAIL: validator accepts an overlong SKILL.md"
+  exit 1
+fi
+grep -q "over 220 lines" "$test_dir/result"
 echo "rpcwright: validator regression check passed"

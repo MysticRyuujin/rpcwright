@@ -37,6 +37,11 @@ while IFS= read -r f; do
   done < <(grep -oE '\]\([^) ]+\)' "$f" | sed -E 's/^\]\(//; s/\)$//')
 done < <(find . -name '*.md' -not -path './.git/*')
 
+# 4. SKILL.md stays short enough to read in full; detail belongs in references/.
+if [ "$(wc -l < SKILL.md)" -gt 220 ]; then
+  echo "FAIL: SKILL.md is over 220 lines; move detail to references/"; fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
   echo "rpcwright: all checks passed"
 else

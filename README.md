@@ -9,7 +9,7 @@ JSON-RPC API** — across the four repos that have to agree:
 
 | repo | role |
 | --- | --- |
-| **the client** (go-ethereum, Nethermind, Besu, Erigon, Reth, ethrex) | implements the method |
+| **the client** (go-ethereum, Nethermind, Besu, Erigon, Reth, ethrex, Nimbus) | implements the method |
 | **execution-apis** | the OpenRPC spec (the contract) |
 | **testgen / rpctestgen** | generates `.io` fixtures from a real client |
 | **hive** (`rpc-compat`) | replays fixtures against every client |

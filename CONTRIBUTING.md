@@ -53,3 +53,9 @@ symlink it: `ln -sf SKILL.md <name>`.
 - `bash scripts/validate.sh` passes (frontmatter, mirror symlinks, link
   integrity). CI runs the same check (`.github/workflows/validate.yml`).
 - Run `bash scripts/test-validate.sh` after changing the validator.
+
+## After a merge
+
+If your skill directory links to a checkout of this repository, fast-forward
+that checkout (`git pull --ff-only`). A merged change does not reach your agent
+until you do.

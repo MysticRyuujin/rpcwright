@@ -1,11 +1,15 @@
 ---
 name: rpcwright
 description: >-
-  Implement, review, and conformance-test Ethereum execution-layer JSON-RPC
-  changes across clients, execution-apis OpenRPC schemas, testgen/rpctestgen,
-  speccheck, and Hive rpc-compat. Use for eth_*, debug_*, trace_*, txpool_*, or
-  testing_* API behavior, .io fixtures, named-tracer schemas, and test-chain
-  fork changes.
+  Implement, review, survey, and conformance-test Ethereum execution-layer
+  JSON-RPC behavior across clients (go-ethereum, Nethermind, Erigon, Besu, Reth,
+  ethrex, Nimbus), the execution-apis OpenRPC spec, testgen/rpctestgen,
+  speccheck, and Hive rpc-compat. Load this before any of: a Hive rpc-compat run
+  or failure triage; adding, regenerating, or reviewing .io fixtures; an
+  execution-apis spec PR or issue about eth_*, debug_*, trace_*, txpool_*, or
+  testing_* behavior; a cross-client behavior survey or divergence; a client PR,
+  or review feedback on one, that changes RPC behavior; a geth pin bump in
+  tools/go.mod; named-tracer schemas; test-chain (hivechain) fork changes.
   Excludes ordinary RPC consumption and consensus-layer Beacon APIs.
 ---
 

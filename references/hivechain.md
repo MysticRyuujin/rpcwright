@@ -80,8 +80,8 @@ To survey raw client responses at these blocks, see
 
 ## A post-merge-only chain for a client that cannot import early forks
 
-Some clients do not support pre-merge blocks. On the standard chain such a
-client stays at genesis and fails most fixtures. To test its RPC behavior,
+A client can fail to import the pre-merge blocks of the standard chain. It
+then stops early and fails most fixtures. To test its RPC behavior,
 generate a chain that is post-merge from genesis:
 
 ```sh

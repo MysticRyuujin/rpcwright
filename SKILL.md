@@ -155,7 +155,7 @@ stays the same. A local geth `go.mod` replace selects the reference build for
 - **Validation scripts:** speccheck runs a script with the recorded response as both `expected` and `response`. Test a comparison script with a changed response, not a changed fixture.
 - **Spec-only tests:** Confirm which response the target Hive revision gives to schema validation. It must be the client response, not the recorded one.
 - **Build inputs:** Run local fixtures from a clean copy of the simulator with the matching compiled spec. A leftover `tests/` directory or an edited shared Dockerfile changes later runs without a visible sign.
-- **Client images:** Record the image tag or source revision of each client with every result. An old image can show a divergence that the client already fixed.
+- **Client images:** Record the image tag or source revision of each client with every result. An old image can show a divergence that the client already fixed. See [hive.md](references/hive.md#choose-the-client-image).
 - **Test selection:** Use `--sim.limit 'rpc-compat/<test-regex>'`. Confirm the intended fixture cases run for every selected client.
 - **Test counts:** `tests > 0` is insufficient because launch tests also count. Check fixture names, launch results, and failures.
 - **Failure attribution:** Use the baseline workflow above before you classify a failure as unrelated. A failure outside the edited code is not proof.

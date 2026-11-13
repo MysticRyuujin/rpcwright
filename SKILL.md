@@ -75,7 +75,7 @@ build overrides. Use an isolated checkout when cleanup would otherwise be ambigu
 | Survey raw client behavior | [hive.md](references/hive.md#survey-raw-client-behavior-no-expected-value-needed) |
 | Run local or unmerged fixtures | [hive.md](references/hive.md#run-against-local-or-unmerged-fixtures) |
 | Attribute failures after a chain or pin change | [hivechain.md](references/hivechain.md), the A/B baseline item |
-| Test a client that cannot import the standard chain (ethrex) | [hivechain.md](references/hivechain.md#a-post-merge-only-chain-for-a-client-that-cannot-import-early-forks) |
+| Generate a post-merge-only chain, for example for a client that cannot import the standard chain (ethrex) | [hivechain.md](references/hivechain.md#a-post-merge-only-chain-for-a-client-that-cannot-import-early-forks) |
 
 ## Behavior-change workflow
 

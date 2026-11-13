@@ -81,9 +81,9 @@ To survey raw client responses at these blocks, see
 ## A post-merge-only chain for a client that cannot import early forks
 
 hivechain can generate a chain that is post-merge from genesis. Use it when a
-client fails to import the pre-merge blocks of the standard chain. Such a
-client stops early and fails most fixtures. ethrex is the known case (see
-[clients.md](clients.md#ethrex--rust)). Use it also for a probe that must run
+client fails to import the early blocks of the standard chain. Such a client
+stops early and fails most fixtures. ethrex is the known case: it rejects the
+pre-London blocks (see [clients.md](clients.md#ethrex--rust)). Use it also for a probe that must run
 on every client.
 
 1. Build hivechain from the Hive checkout.
@@ -103,13 +103,16 @@ on every client.
    ```
 
    - The output directory must exist.
+   - `<fork>` is a post-merge fork name. Add `bal` to `-outputs` when the last
+     fork is amsterdam, as `mkchain.sh` does.
    - `-fork-interval 0` activates every fork up to `-lastfork` at genesis. Use
      it to test behavior at one fork.
    - `-fork-interval 3` starts the first post-merge fork at block 0 and each
      later fork three blocks after the one before. Use it to test behavior
      before and after a post-merge fork. Give `-length` at least the block of
      the last fork.
-   - Confirm the schedule in the generated `genesis.json`.
+   - Confirm the schedule in the generated `genesis.json`. It lists post-merge
+     forks as times; block N has time N × 10 s.
 
 3. Produce fixtures for this chain. Fixtures from the standard chain are not
    valid on it. Either fill with the generators, or write survey fixtures by
@@ -120,9 +123,13 @@ on every client.
    ./rpctestgen --bin ./geth --chain /tmp/poschain --out /tmp/postests --tests '<regex>'
    ```
 
-   rpctestgen copies the chain files into the output directory. A generator
-   that looks for a pre-merge block or a specific transaction can fail on this
-   chain; select the generators that you need with `--tests`.
+   rpctestgen copies the chain files into the output directory. For
+   hand-written fixtures, copy `genesis.json`, `chain.rlp`, `forkenv.json`, and
+   `headfcu.json` from `/tmp/poschain` into the fixture directory yourself; the
+   simulator needs them. A generator that looks for a pre-merge block or a
+   specific transaction can fail on this chain; select the generators that you
+   need with `--tests`. The geth that `tools/go.mod` pins must support the last
+   fork.
 
 4. Run the set from a simulator copy. Follow
    [hive.md](hive.md#run-against-local-or-unmerged-fixtures) and use

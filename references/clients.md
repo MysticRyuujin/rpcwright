@@ -270,11 +270,12 @@ These notes match nimbus-eth1 revision 69eaa6ac.
   ethrex's `rust-toolchain.toml` auto-fetches the pinned toolchain.
 - ethrex does not import the standard chain. It rejects the pre-London blocks
   and stays at genesis, so `eth_blockNumber` returns `0x0` and most fixtures
-  fail for that one cause. Do not count those failures as separate divergences.
-  To test ethrex RPC behavior, use a
-  [post-merge-only chain](hivechain.md#a-post-merge-only-chain-for-a-client-that-cannot-import-early-forks).
-  Compare `eth_blockNumber` with the chain head first; the limit can change in
-  a later ethrex revision. Omitted-block equivalence proves default selection only; it does not
+  fail for that one cause. Do not count those failures as separate
+  divergences. To test ethrex RPC behavior, generate a post-merge-only chain
+  (see [hivechain.md](hivechain.md#a-post-merge-only-chain-for-a-client-that-cannot-import-early-forks)).
+  Compare `eth_blockNumber` with the chain head first, and read the import log
+  for the first rejected block; a later ethrex revision can remove this import
+  failure. Omitted-block equivalence proves default selection only; it does not
   prove that the returned state is correct.
 
 ## General per-client checklist for any change

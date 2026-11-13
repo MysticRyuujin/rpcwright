@@ -159,6 +159,18 @@ For a brand-new method (not just a case on an existing one):
    client. Put the checks that every client must pass in a validation script.
    Temporary survey or negative-test fixtures are separate from the committed corpus.
 
+## Fixtures that change client state
+
+A fixture that sends a transaction or commits a block changes what later
+fixtures see. rpctestgen runs methods in `AllMethods` order and cases in slice
+order. The runner replays files in directory-walk order (`filepath.Walk` in
+`tools/iofile/load.go`: lexical by path). For a fixture that reads state which
+another fixture changes, the two orders must agree, or the recorded response
+depends on state that the replay has not produced yet. The method directory
+name is fixed, so set the position in `AllMethods` and choose the case name to
+make the lexical order equal the fill order. Check the neighbors that read
+shared state such as the transaction pool.
+
 ## The .io fixture format
 
 ```

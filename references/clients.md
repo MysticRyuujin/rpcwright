@@ -18,8 +18,9 @@ intended repository and revision. See [hive.md](hive.md).
 | Reth | Rust | `crates/rpc/rpc-eth-api/src/core.rs` + helpers | **Add `#[method(name=…)]` to the `EthApiServer` trait** + impl; auto-registered via `into_rpc()` | `Option<BlockId>` (None→latest) | `cargo build` / `cargo test -p reth-rpc-eth-api` |
 | Besu | Java | `…/jsonrpc/internal/methods/*.java` | **3 edits:** method class + `RpcMethod` enum + the methods *factory* (`EthJsonRpcMethods`) | `getOptionalParameter(i, …)` | `./gradlew installDist` / `./gradlew test` (JDK per build) |
 | ethrex | Rust | `crates/networking/rpc/eth/*.rs` | **Add a `match` arm** in `rpc.rs` (`"eth_x" => XRequest::call(...)`) + an `RpcHandler` (parse/handle) | manual `params.len()` + `Option`-style default | `cargo build` / `cargo test -p ethrex-rpc` |
+| Nimbus | Nim | `execution_chain/rpc/server_api.nim` | **Add a `proc`** inside the `server.rpc(EthJson):` block of `setupServerAPI`; the proc name is the method name | trailing `Opt[T]` (`blockTag.get(defaultTag)`) | `make nimbus_execution_client` / `tests/test_rpc.nim` |
 
-**Registration takeaway:** geth/Erigon/Nethermind/Reth auto-expose a method once
+**Registration takeaway:** geth/Erigon/Nethermind/Reth/Nimbus auto-expose a method once
 it's on the API surface; **Besu and ethrex require an explicit registry/dispatch
 entry** — forget it and the method is "method not found" even though the handler
 compiles.
@@ -193,9 +194,47 @@ from its siblings*.
 - Build: `cargo build --release --bin reth`. Tests: `cargo test -p
   reth-rpc-eth-api` (trait-signature changes ripple to impls and tests).
 - hive: `clients/reth/` (`Dockerfile`/`Dockerfile.git`/`Dockerfile.local`).
+- **Behavior owned by a dependency.** EVM execution, call environment, tracers,
+  and RPC types live in other repositories (for example revm, alloy-evm,
+  revm-inspectors, alloy, and reth-core). When a divergence traces into one of
+  them, open the fix there. To test it in reth, add a temporary
+  `[patch.crates-io]` entry that points at the local checkout. Patch every crate
+  of that repository that reth uses, or the build resolves two versions of one
+  crate and reports confusing trait errors. Do not commit the patch entry.
+- reth's build reads Git metadata for its version string (`vergen`). A copy
+  from a worktree has none. If the hive `Dockerfile.local` build fails on it or
+  reports a placeholder version, copy from a real clone.
 - Historical surveys report pre-Byzantium raw receipts with a status byte where
   the contract requires a post-state root. Reproduce on the selected revision
   and unchanged baseline before classifying the failure. See [gotchas.md](gotchas.md).
+
+## Nimbus — Nim
+
+These notes match nimbus-eth1 revision 69eaa6ac.
+
+- Handlers: `execution_chain/rpc/server_api.nim` for `eth_*`; `debug.nim` and
+  `common.nim` in the same directory hold `debug_*` and `net_*`.
+  `setupServerAPI` registers each method as a `proc` inside
+  `server.rpc(EthJson):`. The proc name is the method name, so no separate
+  registry exists.
+- Optional parameter idiom: a trailing `Opt[T]`. The handler supplies the
+  default, for example `blockTag.get(defaultTag)` where `defaultTag` is `latest`.
+- Wire types and default JSON writers come from the `nim-web3` submodule, and
+  the server from `nim-json-rpc` (both under `vendor/`). Nimbus adds its own
+  writers in `execution_chain/rpc/rpc_types.nim`. For a field that serializes
+  as `null` where the fixture omits it, check `rpc_types.nim` first, then the
+  `nim-web3` writer.
+- A handler that raises a plain exception gets the generic error envelope from
+  `nim-json-rpc`, with the exception text in `data`. To return a specific code
+  and no `data`, make the handler raise `ApplicationError`.
+- Build: `make nimbus_execution_client`. After you change branches, run
+  `git submodule update --init --recursive`; a stale nested submodule breaks the
+  build.
+- Tests: `tests/test_rpc.nim` calls methods through a real RPC client. It is
+  part of `tests/all_tests.nim`. Read the Makefile for the current test target.
+- hive: `clients/nimbus-el/` has `Dockerfile` and `Dockerfile.git` (no
+  `Dockerfile.local`). To test a change, push the branch to a fork and use
+  `dockerfile: git` with `build_args: {github: <you/nimbus-eth1>, tag: <branch>}`.
 
 ## ethrex — Rust
 

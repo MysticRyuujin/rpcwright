@@ -182,6 +182,27 @@ Fields: `client` (subdir under clients/), `dockerfile` (extension; omit = plain
 `Dockerfile`), `nametag` (label in the image/result name), `build_args`
 (e.g. `tag`, `baseimage`, `github`).
 
+### Choose the client image
+
+The plain `Dockerfile` of each execution client takes `baseimage` and `tag`
+build arguments. The default tag may not be a current development build. For a
+statement about current client behavior, select one:
+
+```yaml
+- client: reth
+  nametag: main
+  build_args:
+    baseimage: <registry>/<image>
+    tag: <development-tag>
+```
+
+- A cached image keeps its tag while the upstream tag moves. Pull it again
+  before a survey, or run hive with `--docker.pull`.
+- A tag can lack an arm64 manifest (`no matching manifest for linux/arm64`).
+  On an arm64 host, pull that tag with `--platform linux/amd64` first.
+- Before you report a divergence, check that the image contains the fix that is
+  already merged upstream.
+
 ## forkenv → client env → flags, and gas-limit pinning
 
 rpc-compat loads `tests/forkenv.json` and passes it to each client as **`HIVE_*` env
@@ -306,6 +327,13 @@ for later blocks.
 
 Add the survey files to the copy's `tests/` directory after the rsync step. A
 later `rsync --delete` removes them.
+
+## Parallelism and other simulators
+
+rpc-compat runs its tests in sequence and does not read `--sim.parallelism`.
+The `--sim.limit` form in this file is for rpc-compat; another simulator can
+parse the test pattern in its own way. Read a test's output from its detail-log
+byte range, not from the simulator log.
 
 ## Iterating quickly
 

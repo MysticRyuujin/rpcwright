@@ -36,7 +36,7 @@ rediscover them the slow way.
 - [`references/clients.md`](references/clients.md): handler locations, registration,
   build examples, and contribution checks for six clients.
 - [`references/hivechain.md`](references/hivechain.md): chain generation, fork
-  configuration, and behavior surveys.
+  configuration, and special-purpose chains.
 - [`references/tracers.md`](references/tracers.md): named-tracer schemas and validation.
 - [`references/trace-namespace.md`](references/trace-namespace.md): the `trace_*`
   draft spec, decision ledger, and cross-client evidence (work in progress).

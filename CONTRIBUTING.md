@@ -15,7 +15,7 @@ illustrates a general technique*. A work-artifact is not. Cut or generalize:
 - "verified in our case", "no change needed", "what we did", "found via this
   workflow", PR/issue-specific narrative, or dated status that will rot.
 - If a line only makes sense in the context of one past change, it doesn't belong
-  in the skill — move the lesson into a gotcha or the worked example, generalized.
+  in the skill — move the lesson into a gotcha, generalized.
 
 ## Keep it structured
 

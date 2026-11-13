@@ -10,7 +10,7 @@ first, then execution-apis.
 
 ```
 $HIVE/cmd/hivechain  ──(mkchain.sh)──▶  $EXECapis/tools/chain/
-    genesis.json chain.rlp forkenv.json headfcu.json accounts.json txinfo.json headstate.json
+    genesis.json chain.rlp forkenv.json headfcu.json accounts.json txinfo.json headstate.json bal
         │
         ├─▶ make fill: rpctestgen inits geth from tools/chain, runs generators,
         │   and COPIES genesis.json + chain.rlp + forkenv.json + headfcu.json

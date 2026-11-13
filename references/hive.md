@@ -84,13 +84,15 @@ Consequences:
   to every later run, including a run that selects a PR with `branch=`.
 - The commented `ADD tests /execution-apis/tests` override also merges. Cloned
   fixtures that your local set deleted or renamed still run.
-- With `ADD tests` enabled, `--sim.buildarg branch=<ref>` still selects the spec
-  but no longer selects the fixtures. The run looks like a test of that ref.
-- A cached simulator image can serve old fixtures. Force a rebuild with
-  `--docker.nocache <image-regex>` when the result does not match the inputs.
+- With `ADD tests` enabled, `--sim.buildarg branch=<ref>` gives a mixed set. A
+  local file replaces the fixture of the same name from the ref, and the other
+  fixtures of the ref still run. The run looks like a test of that ref.
+- A cached simulator image can serve old fixtures. Docker caches the clone step
+  by its command text, so the same `branch` value does not fetch new commits.
+  Force a rebuild with `--docker.nocache <image-regex>` when the result does
+  not match the inputs.
 
-This description matches the Dockerfile at Hive revision 4ab0d323. Do not edit
-the shared `rpc-compat` directory. Before a run from it, confirm
+Do not edit the shared `rpc-compat` directory. Before a run from it, confirm
 that `git status --short simulators/ethereum/rpc-compat` prints nothing.
 
 **Fixtures from a branch or PR of ethereum/execution-apis:** use the unmodified
@@ -102,8 +104,8 @@ simulator. No copy is needed.
 
 The clone URL is fixed, so a branch name alone does not select a fork.
 
-**Local fixtures:** make a copy from tracked files only, then replace the
-cloned fixtures and spec in that copy.
+**Local fixtures:** make a copy from the files committed at `HEAD`, then replace
+the cloned fixtures and spec in that copy.
 
 ```sh
 cd "$HIVE"
@@ -132,8 +134,10 @@ default ref.
 
 The runner imports `iofile` and `spec` from the execution-apis `tools` module
 that the simulator's `go.mod` pins. To test an unmerged change to those
-packages, copy `tools` into the simulator copy and add a `replace` directive
-for `github.com/ethereum/execution-apis/tools` that points at it.
+packages, copy `tools` into the simulator copy, add a `replace` directive for
+`github.com/ethereum/execution-apis/tools` that points at it, and run
+`go mod tidy` in the copy. Without the tidy step the build stops when the two
+modules require different dependency versions.
 
 ## Run against YOUR client built from source
 
@@ -158,8 +162,8 @@ rsync -a --delete --exclude='.git' --exclude='build/bin/' --exclude='/tests/' \
 - Do not exclude all of `build`. geth's Makefile runs `build/ci.go`.
 - geth's top-level `tests/` holds large consensus fixtures that the client build
   does not need.
-- Check the client's `Dockerfile.local` for a build that reads Git metadata. For
-  such a client, copy from a real clone, not from a worktree.
+- Some client builds read Git metadata. For such a client, copy from a real
+  clone, not from a worktree, and omit `--exclude='.git'`.
 
 Select the Dockerfile variant via a **client-file** YAML (`--client-file`):
 
@@ -190,9 +194,9 @@ block-*producing* fixtures diverge: geth moves parent gasLimit toward `--miner.g
 by `parent/1024` per block; Nethermind holds parent unless `Blocks.TargetBlockGasLimit`
 is set → different gasLimit→baseFee→blockHash. The simulator sets a default when
 `forkenv.json` has no value (`main.go`). A client is pinned only when its wrapper
-reads the variable: `grep -l HIVE_TARGET_GAS_LIMIT -r clients/`. At the inspected
-revision the nimbus-el wrapper does not. Gas-limit-only divergence ⇒ check this
-mapping before the client.
+reads the variable: `grep -l HIVE_TARGET_GAS_LIMIT -r clients/`. A client that
+the command does not list (nimbus-el at the inspected revision) is not pinned.
+Gas-limit-only divergence ⇒ check this mapping before the client.
 
 ## The `testing_` namespace and state-mutating methods
 
@@ -296,8 +300,12 @@ revisions and configuration with the responses. Keep survey fixtures outside the
 committed corpus and remove them from subsequent conformance runs.
 
 Before you interpret a missing or empty result, compare the client's
-`eth_blockNumber` with the chain head. A client that did not import the chain
-answers every historical query from genesis.
+`eth_blockNumber` with the chain head. A client that stopped its import early
+answers `latest` from the block where it stopped and returns an error or `null`
+for later blocks.
+
+Add the survey files to the copy's `tests/` directory after the rsync step. A
+later `rsync --delete` removes them.
 
 ## Iterating quickly
 
@@ -305,4 +313,5 @@ Built images are cached, so re-runs after the first are fast (straight to the
 simulation) unless you changed client source (rebuilds that image) or simulator
 code/tests (rebuilds the simulator image). A fixture edit in the simulator
 copy's `tests/` directory changes the build context, so the next run rebuilds the
-image. If a run still shows old fixtures, force the rebuild with `--docker.nocache`.
+image. If a run still shows old fixtures, force the rebuild with
+`--docker.nocache <image-regex>`.

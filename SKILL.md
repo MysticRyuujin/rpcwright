@@ -75,6 +75,7 @@ build overrides. Use an isolated checkout when cleanup would otherwise be ambigu
 | Survey raw client behavior | [hive.md](references/hive.md#survey-raw-client-behavior-no-expected-value-needed) |
 | Run local or unmerged fixtures | [hive.md](references/hive.md#run-against-local-or-unmerged-fixtures) |
 | Attribute failures after a chain or pin change | [hivechain.md](references/hivechain.md), the A/B baseline item |
+| Generate a post-merge-only chain, for example for a client that cannot import the standard chain (ethrex) | [hivechain.md](references/hivechain.md#a-post-merge-only-chain-for-a-client-that-cannot-import-early-forks) |
 
 ## Behavior-change workflow
 
@@ -150,7 +151,7 @@ stays the same. A local geth `go.mod` replace selects the reference build for
 - **Schema enforcement:** For a changed constraint, use a temporary invalid spec or fixture and confirm rejection.
 - **speccheck exclusions:** Names containing `invalid` skip parameter validation. Error responses get an error-code check instead of result validation.
 - **Fixture comparison:** Ordinary Hive tests compare recorded responses. For an error, `code` and `data` must match exactly; only `message` is removed before the comparison.
-- **Imported head:** Compare each client's `eth_blockNumber` with the chain head before you interpret its failures. A client that did not import the chain fails most fixtures for one cause.
+- **Imported head:** Compare each client's `eth_blockNumber` with the chain head before you interpret its failures. A client that did not import the chain fails most fixtures for one cause; test it on a post-merge-only chain (see the route table).
 - **Test strength:** Prefer an exact fixture. Use `speconly` only for values the spec leaves to the client. Then add a script that compares the rest of the response with the recorded one. A schema-only check is the last choice. When a client differs on a defined value, fix the client; do not loosen the test.
 - **Validation scripts:** speccheck runs a script with the recorded response as both `expected` and `response`. Test a comparison script with a changed response, not a changed fixture.
 - **Spec-only tests:** Confirm which response the target Hive revision gives to schema validation. It must be the client response, not the recorded one.

@@ -80,21 +80,64 @@ To survey raw client responses at these blocks, see
 
 ## A post-merge-only chain for a client that cannot import early forks
 
-A client can fail to import the pre-merge blocks of the standard chain. It
-then stops early and fails most fixtures. To test its RPC behavior,
-generate a chain that is post-merge from genesis:
+hivechain can generate a chain that is post-merge from genesis. Use it when a
+client fails to import the early blocks of the standard chain. Such a client
+stops early and fails most fixtures. ethrex is the known case: it rejects the
+pre-London blocks (see [clients.md](clients.md#ethrex--rust)). Use it also for a probe that must run
+on every client.
 
-```sh
-mkdir -p /tmp/poschain
-./hivechain generate -outdir /tmp/poschain -pos -fork-interval 0 -lastfork <fork> \
-    -length <n> -tx-count 4 -tx-interval 1 \
-    -outputs genesis,chain,forkenv,headstate,txinfo,accounts,headfcu
-```
+1. Build hivechain from the Hive checkout.
 
-The output directory must exist. Fixtures from the standard chain are not valid
-on this chain. Fill a separate fixture set against it and run that set from a
-simulator copy (see [hive.md](hive.md#run-against-local-or-unmerged-fixtures)).
-Do not commit this chain or its fixtures.
+   ```sh
+   cd "$HIVE" && go build -o /tmp/hivechain ./cmd/hivechain
+   ```
+
+2. Generate the chain. `-pos` puts every pre-merge fork at block 0. The
+   post-merge forks then follow `-fork-interval`.
+
+   ```sh
+   mkdir -p /tmp/poschain
+   /tmp/hivechain generate -outdir /tmp/poschain -pos -fork-interval 0 \
+       -lastfork <fork> -length <n> -tx-count 4 -tx-interval 1 \
+       -outputs genesis,chain,forkenv,headstate,txinfo,accounts,headfcu
+   ```
+
+   - The output directory must exist.
+   - `<fork>` is a post-merge fork name. Add `bal` to `-outputs` when the last
+     fork is amsterdam, as `mkchain.sh` does.
+   - `-fork-interval 0` activates every fork up to `-lastfork` at genesis. Use
+     it to test behavior at one fork.
+   - `-fork-interval 3` starts the first post-merge fork at block 0 and each
+     later fork three blocks after the one before. Use it to test behavior
+     before and after a post-merge fork. Give `-length` at least the block of
+     the last fork.
+   - Confirm the schedule in the generated `genesis.json`. It lists post-merge
+     forks as times; block N has time N × 10 s.
+
+3. Produce fixtures for this chain. Fixtures from the standard chain are not
+   valid on it. Either fill with the generators, or write survey fixtures by
+   hand (see [hive.md](hive.md#survey-raw-client-behavior-no-expected-value-needed)).
+
+   ```sh
+   cd "$EXECapis/tools" && make build geth
+   ./rpctestgen --bin ./geth --chain /tmp/poschain --out /tmp/postests --tests '<regex>'
+   ```
+
+   rpctestgen copies the chain files into the output directory. For
+   hand-written fixtures, copy `genesis.json`, `chain.rlp`, `forkenv.json`, and
+   `headfcu.json` from `/tmp/poschain` into the fixture directory yourself; the
+   simulator needs them. A generator that looks for a pre-merge block or a
+   specific transaction can fail on this chain; select the generators that you
+   need with `--tests`. The geth that `tools/go.mod` pins must support the last
+   fork.
+
+4. Run the set from a simulator copy. Follow
+   [hive.md](hive.md#run-against-local-or-unmerged-fixtures) and use
+   `/tmp/postests/` as the fixture source. Check that each client's
+   `eth_blockNumber` equals the chain head.
+
+Do not commit this chain or its fixtures. Report results from it as results on
+a post-merge-only chain; they do not show behavior at pre-merge blocks.
 
 ## Bumping the chain to a new fork — the recipe
 

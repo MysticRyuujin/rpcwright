@@ -51,6 +51,7 @@ Inspect the required changes before applying them. Preserve local wrapper edits.
 - **Ordinary test:** the client response must equal the recorded `<<` response
   (`jsondiff`). Error messages are redacted from the comparison **only** when
   both expected and actual are errors, including nested `error` objects.
+  `error.code` and `error.data` stay in the comparison and must match exactly.
 - **`speconly:` test:** the exact comparison is skipped when the client returns
   a result. Schema validation and the script remain. An error response is still
   compared with the recorded one.
@@ -68,50 +69,71 @@ So: an ordinary test is changed via the `.io` fixtures (and the client); a
 `speconly` test is governed by the **OpenRPC schema** in `src/` and its script.
 The sim regenerates `refs-openrpc.json` from source on its next image build.
 
-## Run against LOCAL fixtures (your modified tests)
+## Run against local or unmerged fixtures
 
-By default the Dockerfile pulls execution-apis from GitHub at `GIT_REF`. To use
-your local fixtures, the Dockerfile has a documented override — copy your tests
-into the simulator dir and uncomment the `ADD` line:
+The simulator image takes fixtures and the spec from three places. The builder
+stage clones execution-apis at `GIT_REF` and runs `make build`. The final stage
+copies the whole simulator directory (`ADD . /source`). It then copies the
+builder's `tests/` and `refs-openrpc.json` over that directory. A directory copy
+merges; it does not delete. So a file in the simulator directory's own `tests/`
+stays in the image unless the clone has a file with the same name.
 
-```dockerfile
-# in simulators/ethereum/rpc-compat/Dockerfile:
-# ADD tests /execution-apis/tests          # <- uncomment this
-```
+Consequences:
+
+- A leftover `tests/` directory in the simulator directory adds stale fixtures
+  to every later run, including a run that selects a PR with `branch=`.
+- The commented `ADD tests /execution-apis/tests` override also merges. Cloned
+  fixtures that your local set deleted or renamed still run.
+- With `ADD tests` enabled, `--sim.buildarg branch=<ref>` still selects the spec
+  but no longer selects the fixtures. The run looks like a test of that ref.
+- A cached simulator image can serve old fixtures. Force a rebuild with
+  `--docker.nocache <image-regex>` when the result does not match the inputs.
+
+This description matches the Dockerfile at Hive revision 4ab0d323. Do not edit
+the shared `rpc-compat` directory. Before a run from it, confirm
+that `git status --short simulators/ethereum/rpc-compat` prints nothing.
+
+**Fixtures from a branch or PR of ethereum/execution-apis:** use the unmodified
+simulator. No copy is needed.
 
 ```sh
-# put your fixtures where the Dockerfile will ADD them:
-rsync -a $EXECapis/tests/ $HIVE/simulators/ethereum/rpc-compat/tests/
-# (the tests dir is self-contained: chain.rlp, genesis.json, forkenv.json,
-#  headfcu.json, and the per-method .io files)
+./hive --sim ethereum/rpc-compat --sim.buildarg branch=refs/pull/<N>/head ...
 ```
 
-Confirm the chain matches if you only copy a few fixtures: `cmp` the two
-`chain.rlp` files. Fixtures are only valid against the chain they were generated
-on.
+The clone URL is fixed, so a branch name alone does not select a fork.
 
-For a local spec change, generate and copy `refs-openrpc.json` into the
-simulator build context. Its gitignored status does not prevent Docker from
-copying it. Fixtures that use a new method or component fail against a spec
-built from the default ref.
+**Local fixtures:** make a copy from tracked files only, then replace the
+cloned fixtures and spec in that copy.
 
 ```sh
-cd "$EXECapis"
-make build
-cp refs-openrpc.json "$HIVE/simulators/ethereum/rpc-compat/refs-openrpc.json"
+cd "$HIVE"
+SIM=simulators/ethereum/rpc-compat-<topic>
+mkdir "$SIM" && git archive HEAD:simulators/ethereum/rpc-compat | tar -x -C "$SIM"
+rsync -a --delete "$EXECapis/tests/" "$SIM/tests/"
+(cd "$EXECapis" && make build) && cp "$EXECapis/refs-openrpc.json" "$SIM/"
 ```
 
-Enable this override after the Dockerfile's `make build` step:
+In the copy's Dockerfile, replace the two commented override lines with:
 
 ```dockerfile
+RUN rm -rf /execution-apis/tests
+ADD tests /execution-apis/tests
 ADD refs-openrpc.json /execution-apis/refs-openrpc.json
 ```
 
-The inspected Hive revision includes this line as a commented override.
-Check the target Dockerfile and `.dockerignore` before use. A remote spec is
-another option: `branch` supplies `GIT_REF`, and the clone URL determines which
-repository can provide that ref. A branch name alone does not select a fork.
-Keep the spec, fixtures, and chain aligned.
+Run it with `--sim ethereum/rpc-compat-<topic>`. Delete the copy when the task
+ends; an old copy keeps an old Dockerfile and runner.
+
+Copy the full `tests/` directory. It holds `chain.rlp`, `genesis.json`,
+`forkenv.json`, `headfcu.json`, and the fixtures, and fixtures are valid only
+for the chain that produced them. The spec must come from the same checkout:
+fixtures that use a new method or component fail against a spec built from the
+default ref.
+
+The runner imports `iofile` and `spec` from the execution-apis `tools` module
+that the simulator's `go.mod` pins. To test an unmerged change to those
+packages, copy `tools` into the simulator copy and add a `replace` directive
+for `github.com/ethereum/execution-apis/tools` that points at it.
 
 ## Run against YOUR client built from source
 
@@ -127,9 +149,17 @@ For a local change, use `Dockerfile.local`:
 
 ```sh
 # place your client source where the local Dockerfile expects it (gitignored):
-rsync -a --delete --exclude='.git/' --exclude='build/bin/' \
+rsync -a --delete --exclude='.git' --exclude='build/bin/' --exclude='/tests/' \
   $GETH/ $HIVE/clients/go-ethereum/go-ethereum/
 ```
+
+- Write `--exclude='.git'` without a trailing slash. In a Git worktree `.git` is
+  a file, and `.git/` matches directories only.
+- Do not exclude all of `build`. geth's Makefile runs `build/ci.go`.
+- geth's top-level `tests/` holds large consensus fixtures that the client build
+  does not need.
+- Check the client's `Dockerfile.local` for a build that reads Git metadata. For
+  such a client, copy from a real clone, not from a worktree.
 
 Select the Dockerfile variant via a **client-file** YAML (`--client-file`):
 
@@ -158,8 +188,11 @@ consumer).
 **`HIVE_TARGET_GAS_LIMIT`** (execution-apis #801 / hive #1496) is the example. Unpinned,
 block-*producing* fixtures diverge: geth moves parent gasLimit toward `--miner.gaslimit`
 by `parent/1024` per block; Nethermind holds parent unless `Blocks.TargetBlockGasLimit`
-is set → different gasLimit→baseFee→blockHash. New clients must add the same mapping.
-Gas-limit-only divergence ⇒ suspect this, not the client.
+is set → different gasLimit→baseFee→blockHash. The simulator sets a default when
+`forkenv.json` has no value (`main.go`). A client is pinned only when its wrapper
+reads the variable: `grep -l HIVE_TARGET_GAS_LIMIT -r clients/`. At the inspected
+revision the nimbus-el wrapper does not. Gas-limit-only divergence ⇒ check this
+mapping before the client.
 
 ## The `testing_` namespace and state-mutating methods
 
@@ -238,9 +271,38 @@ sub-tests. To see *why* it died, re-run with **`--docker.output`** (streams cont
 stdout/stderr). Beware stale logs: `ls -t workspace/logs/<client>/*.log` can return a
 *previous* run's file — check its timestamp.
 
+## Survey raw client behavior (no expected value needed)
+
+For a client behavior survey, use temporary `.io` files in a simulator copy (see
+"Run against local or unmerged fixtures") with an
+impossible `<<` line (e.g. `"result":"SURVEY_PLACEHOLDER"`), give them a shared name
+prefix, and run `--sim.limit "rpc-compat/<prefix>"`. Every case "fails" — that is the
+point; the raw answers are in the per-test log. The request/response pairs are NOT in
+the simulator log; they live in `workspace/logs/details/<sim-id>-0.log`, addressed by
+byte offsets from the results JSON (`summaryResult.log.{begin,end}`), as `>> ` / `<< `
+lines:
+
+```sh
+cd $HIVE; F=$(ls -t workspace/logs/*-*.json | head -1)
+D=workspace/logs/details/$(basename $(jq -r .simLog $F) .log | sed "s/-simulator-/-/")-0.log
+jq -r '.testCases|to_entries[]|select(.value.name|test("<prefix>"))|"\(.value.name)\t\(.value.summaryResult.log.begin)\t\(.value.summaryResult.log.end)"' $F \
+| sort | while IFS=$'\t' read -r name b e; do
+  printf '%s\t%s\n' "$name" "$(tail -c +$((b+1)) $D | head -c $((e-b)) | sed 's/\x1b\[[0-9;]*m//g' | grep -a -m1 '^<<' | sed 's/^<< *//')"
+done
+```
+
+Use runtime results to confirm behavior inferred from source. Record client
+revisions and configuration with the responses. Keep survey fixtures outside the
+committed corpus and remove them from subsequent conformance runs.
+
+Before you interpret a missing or empty result, compare the client's
+`eth_blockNumber` with the chain head. A client that did not import the chain
+answers every historical query from genesis.
+
 ## Iterating quickly
 
 Built images are cached, so re-runs after the first are fast (straight to the
 simulation) unless you changed client source (rebuilds that image) or simulator
-code/tests (rebuilds the simulator image). Editing a fixture in the simulator's
-`tests/` dir is picked up on the next run because the simulator image is rebuilt.
+code/tests (rebuilds the simulator image). A fixture edit in the simulator
+copy's `tests/` directory changes the build context, so the next run rebuilds the
+image. If a run still shows old fixtures, force the rebuild with `--docker.nocache`.

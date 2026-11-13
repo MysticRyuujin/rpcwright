@@ -53,7 +53,7 @@ build overrides. Use an isolated checkout when cleanup would otherwise be ambigu
 | Standardize named-tracer output | [tracers.md](references/tracers.md), then the spec and fixture references |
 | Align or spec Parity-style `trace_*` methods | [trace-namespace.md](references/trace-namespace.md) |
 | Investigate a specific failure | Search [gotchas.md](references/gotchas.md) for the symptom |
-| Follow an example across repositories | [worked-example.md](references/worked-example.md) |
+| Survey raw client behavior | [hive.md](references/hive.md#survey-raw-client-behavior-no-expected-value-needed) |
 
 ## Behavior-change workflow
 

@@ -25,9 +25,8 @@ illustrates a general technique*. A work-artifact is not. Cut or generalize:
 - **A new change-type** needs routing in SKILL.md only when existing routing does
   not cover it. Keep the mechanics in the relevant reference file
   (`execution-apis.md` / `testgen.md` / `clients.md` / `hive.md`).
-- **Reusable traps** go in `references/gotchas.md`. The long narrative of an
-  example lives in `references/worked-example.md`; other files reference it
-  rather than re-telling it.
+- **Reusable traps** go in `references/gotchas.md`. State each fact in one file;
+  other files link to it.
 - Prefer verifying client specifics against the actual repo — file paths and CI
   rules drift, so the skill says "read the workflow/source" rather than freezing
   exact details that go stale.

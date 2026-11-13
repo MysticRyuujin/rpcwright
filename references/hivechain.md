@@ -30,26 +30,28 @@ and `t.chain.txinfo`.
 ## mkchain.sh knobs and the fork-placement math
 
 ```sh
-./hivechain generate -outdir chain/ -length 54 -tx-count 4 -tx-interval 1 \
-    -fork-interval 3 -lastfork bpo2 \
-    -disable-txmods tx-largereceipt \
-    -outputs genesis,chain,forkenv,headstate,txinfo,accounts,headfcu
+./hivechain generate -outdir chain/ -length 60 -tx-count 4 -tx-interval 1 \
+    -fork-interval 3 -lastfork amsterdam \
+    -outputs genesis,chain,forkenv,headstate,txinfo,accounts,headfcu,bal
 ```
+
+Read `$EXECapis/tools/mkchain.sh` for the current flags. This example matches
+execution-apis revision 981aa66d.
 
 - Forks activate every `-fork-interval` blocks starting at genesis, in the
   hard-coded mainnet order in `genesis.go` (`preMergeForkNames` +
   `posForkNames`). Post-merge forks are timestamp-based; block time is 10s
   (hard-coded in `core.GenerateChain`), so fork at block N ⇒ timestamp N*10.
 - **`-length` must be ≥ (numForks−1) × forkInterval** or the trailing forks all
-  pile up on the last block. 19 forks (13 pre-merge + shanghai…bpo2) × 3 = last
-  fork at block 54. The convention is head == last-fork activation block.
+  pile up on the last block. With amsterdam as the twentieth fork, 19 × 3 puts
+  the last fork at block 57. Length 60 leaves three blocks after it.
 - `-lastfork` truncates the fork list; the fork must exist in `posForkNames`.
 
 ## Locate blocks before and after the target fork
 
 Read the schedule from `tests/genesis.json` and the generated block timestamps.
 Do not assume every fork activates at genesis or that every fork is present.
-The bpo2 example uses a three-block interval and reaches block 54:
+The amsterdam example uses a three-block interval and has its head at block 60:
 
 | fork | activates at block | pre-fork range |
 |---|---|---|
@@ -63,6 +65,7 @@ The bpo2 example uses a three-block interval and reaches block 54:
 | **cancun** (t=420, EIP-4844) | **42** | 39-41 |
 | **prague** (t=450, EIP-7702) | **45** | 42-44 |
 | osaka / bpo1 / bpo2 (t=480/510/540) | 48 / 51 / 54 | |
+| **amsterdam** (t=570) | **57** | 54-56 |
 
 Timestamp forks: block N has timestamp N*10. To exercise "field X at a block before
 its fork," pass the block **number** as the block param (`"0x14"` = block 20 is
@@ -72,33 +75,8 @@ called with input `0x010203040506`) and `accounts.json` senders exist at every
 block, so no tx-mod lookup is needed. Verify the selected client's imported head
 and historical state before interpreting a missing result.
 
-### Surveying raw client behavior with hive (no expected value needed)
-
-For a client behavior survey, use temporary `.io` files in an isolated simulator
-test directory with an
-impossible `<<` line (e.g. `"result":"SURVEY_PLACEHOLDER"`), give them a shared name
-prefix, and run `--sim.limit "rpc-compat/<prefix>"`. Every case "fails" — that is the
-point; the raw answers are in the per-test log. The request/response pairs are NOT in
-the simulator log; they live in `workspace/logs/details/<sim-id>-0.log`, addressed by
-byte offsets from the results JSON (`summaryResult.log.{begin,end}`), as `>> ` / `<< `
-lines:
-
-```sh
-cd $HIVE; F=$(ls -t workspace/logs/*-*.json | head -1)
-D=workspace/logs/details/$(basename $(jq -r .simLog $F) .log | sed "s/-simulator-/-/")-0.log
-jq -r '.testCases|to_entries[]|select(.value.name|test("<prefix>"))|"\(.value.name)\t\(.value.summaryResult.log.begin)\t\(.value.summaryResult.log.end)"' $F \
-| sort | while IFS=$'\t' read -r name b e; do
-  printf '%s\t%s\n' "$name" "$(tail -c +$((b+1)) $D | head -c $((e-b)) | sed 's/\x1b\[[0-9;]*m//g' | grep -a -m1 '^<<' | sed 's/^<< *//')"
-done
-```
-
-Use runtime results to confirm behavior inferred from source. Record client
-revisions and configuration with the responses. Keep survey fixtures outside the
-committed corpus and remove them from subsequent conformance runs.
-
-Past ethrex surveys report missing state at early blocks while genesis queries
-succeed. Recheck this on the selected revision. A genesis query is a separate
-data point; different fork and signature rules can prevent a direct comparison.
+To survey raw client responses at these blocks, see
+[hive.md](hive.md#survey-raw-client-behavior-no-expected-value-needed).
 
 ## Bumping the chain to a new fork — the recipe
 

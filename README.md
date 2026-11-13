@@ -41,9 +41,6 @@ rediscover them the slow way.
 - [`references/trace-namespace.md`](references/trace-namespace.md): the `trace_*`
   draft spec, decision ledger, and cross-client evidence (work in progress).
 - [`references/gotchas.md`](references/gotchas.md) — the full catalog.
-- [`references/worked-example.md`](references/worked-example.md) — a complete
-  change end to end (default an omitted block param to `latest`), including a
-  real cross-client bug found and fixed.
 
 ## Install
 

@@ -26,14 +26,15 @@ behavior and can contain that client's bugs. Check disagreements against the
 spec before changing a client to match a fixture.
 
 When the spec has a gap or clients disagree, derive one recommended rule. Use
-this evidence in order: the consensus specs and EIPs, earlier merged spec and
+this evidence in order: the execution specs and EIPs, earlier merged spec and
 client decisions on the same behavior, then the current behavior of each client.
 Present the rule as a proposal with its evidence. Do not list options without a
 recommendation. Client agreement supports a proposal. It is not an approved
 standard until client teams review it.
 
 - For behavior that affects interoperability, do not propose "undefined" or
-  "client-specific". Values that the spec leaves to the client stay `speconly`.
+  "client-specific". The exception is a value that the spec leaves to the
+  client; see "Test strength" below.
 - Search the spec and client repositories for an existing issue or PR before
   you file one.
 - Before you call a divergence a consensus bug, show that a valid chain can
@@ -99,29 +100,35 @@ stays the same. A local geth `go.mod` replace selects the reference build for
 2. Probe the running clients with placeholder fixtures (see the route table).
 3. Make a table: one row per client, with the result or the error code and data.
 4. Search for earlier decisions: merged PRs, issues, and EIPs.
-5. Derive the rule. Open the spec issue or PR, and an issue or PR for each
-   client that differs.
+5. Derive the rule and open the spec issue or PR. For each client that differs,
+   file an issue that links it. Open a client PR when the spec already defines
+   the behavior, or after the proposal has agreement.
 
 **Stacked change set.** Use it when a spec change needs new reference-client behavior.
 
 1. Open the client PR with its tests.
-2. Open the spec PR with fixtures from a local `replace` build. State the
-   dependency. The fill check in CI fails until the pinned client has the change.
+2. Open the spec PR with fixtures from a local `replace` build. The fill check
+   in CI fails until the pinned client has the change.
 3. After the client PR merges, bump the pin in `tools/go.mod` and fill again.
-   Put fixture drift that the bump causes elsewhere in a separate PR.
+   If the bump changes other fixtures, put the bump and that drift in one PR
+   and merge it first. Then rebase the spec PR and fill again.
 4. Open PRs for the other clients against the same fixtures.
 
 **Full matrix with a baseline.** Use it to attribute failures to a change.
 
 1. Run the selected client images against the unchanged fixtures. Record failures.
 2. Run the same images against the changed fixtures.
-3. Report, per client, only the failures that the second run adds.
+3. Confirm that each client launched and ran the same number of tests in both
+   runs.
+4. Report, per client, the failures that the second run adds and removes.
 
 **Pre-merge batch check.** Use it before several spec PRs merge together.
 
 1. Merge the PRs into one checkout of the main branch, in the intended order.
-2. Run `make build` and `make fill`. `tests/` must show no difference.
-3. Run speccheck, then a Hive run of the merged fixtures.
+2. Run `make build` and `make fill`. `tests/` must show no difference, apart
+   from files that the repository's CI check excludes.
+3. Run speccheck, then a Hive run of the merged fixtures with the merged
+   compiled spec.
 
 ## What each change needs
 
@@ -148,10 +155,10 @@ stays the same. A local geth `go.mod` replace selects the reference build for
 - **Validation scripts:** speccheck runs a script with the recorded response as both `expected` and `response`. Test a comparison script with a changed response, not a changed fixture.
 - **Spec-only tests:** Confirm which response the target Hive revision gives to schema validation. It must be the client response, not the recorded one.
 - **Build inputs:** Run local fixtures from a clean copy of the simulator with the matching compiled spec. A leftover `tests/` directory or an edited shared Dockerfile changes later runs without a visible sign.
-- **Client images:** Record the image tag or source revision of each client, and when you pulled it. An old image can show a divergence that the client already fixed.
+- **Client images:** Record the image tag or source revision of each client with every result. An old image can show a divergence that the client already fixed.
 - **Test selection:** Use `--sim.limit 'rpc-compat/<test-regex>'`. Confirm the intended fixture cases run for every selected client.
 - **Test counts:** `tests > 0` is insufficient because launch tests also count. Check fixture names, launch results, and failures.
-- **Failure attribution:** Compare against the unchanged baseline with the same client builds and configuration before classifying a failure as unrelated.
+- **Failure attribution:** Use the baseline workflow above before you classify a failure as unrelated. A failure outside the edited code is not proof.
 
 ## Completion evidence
 

@@ -144,10 +144,11 @@ edits with a blanket checkout. See [hive.md](hive.md).
 
 ## 13. Historical client limitations resemble regressions
 
-Past surveys report pre-Byzantium receipt encoding differences in Reth and
-historical-state gaps in ethrex on the Hive chain. These are diagnostic leads,
-not permanent exclusions. Confirm the client revision, imported head, fork
-schedule, and raw response. Reproduce on the unchanged baseline before attributing
+A client that did not import the full chain fails most fixtures for one cause.
+Compare each client's `eth_blockNumber` with the chain head before you count
+failures. Past surveys also report pre-Byzantium receipt encoding differences in
+Reth. These are diagnostic leads, not permanent exclusions. Confirm the client
+revision, fork schedule, and raw response. Reproduce on the unchanged baseline before attributing
 an unrelated failure. See [clients.md](clients.md) and [hivechain.md](hivechain.md).
 
 ## 14. Schema validation accepts output that exact comparison rejects

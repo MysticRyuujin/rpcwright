@@ -225,14 +225,15 @@ from its siblings*.
   confirm cargo actually ran (`cargo --version` prints a version); override with
   e.g. `ASDF_RUST_VERSION=1.91.0 cargo ...`. (See gotcha #10a — confirm your
   command actually executed.)
-- hive: `clients/ethrex/` has `Dockerfile` and `Dockerfile.git` (no
-  `Dockerfile.local`). Build from a fork via `build_args: {github: <you/ethrex>,
-  tag: <branch>}`; the `Dockerfile.git` `rust:latest` builder + ethrex's
-  `rust-toolchain.toml` auto-fetches the pinned toolchain.
-- Historical surveys report missing state or receipts for some blocks on the
-  Hive chain. Check import logs, the imported head, and the same request on the
-  unchanged baseline. Omitted-block equivalence proves default selection only;
-  it does not prove that the returned state is correct.
+- hive: `clients/ethrex/` has `Dockerfile`, `Dockerfile.git`, and
+  `Dockerfile.local`. To build from a fork, use `build_args: {github:
+  <you/ethrex>, tag: <branch>}`; the `Dockerfile.git` `rust:latest` builder +
+  ethrex's `rust-toolchain.toml` auto-fetches the pinned toolchain.
+- Before you interpret an ethrex failure, compare its `eth_blockNumber` with the
+  chain head. A client that rejects a block stops at the block before it, and
+  then most fixtures fail for one cause. Read the import log for the first rejected
+  block. Omitted-block equivalence proves default selection only; it does not
+  prove that the returned state is correct.
 
 ## General per-client checklist for any change
 

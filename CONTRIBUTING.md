@@ -15,7 +15,7 @@ illustrates a general technique*. A work-artifact is not. Cut or generalize:
 - "verified in our case", "no change needed", "what we did", "found via this
   workflow", PR/issue-specific narrative, or dated status that will rot.
 - If a line only makes sense in the context of one past change, it doesn't belong
-  in the skill — move the lesson into a gotcha or the worked example, generalized.
+  in the skill — move the lesson into a gotcha, generalized.
 
 ## Keep it structured
 
@@ -25,9 +25,8 @@ illustrates a general technique*. A work-artifact is not. Cut or generalize:
 - **A new change-type** needs routing in SKILL.md only when existing routing does
   not cover it. Keep the mechanics in the relevant reference file
   (`execution-apis.md` / `testgen.md` / `clients.md` / `hive.md`).
-- **Reusable traps** go in `references/gotchas.md`. The long narrative of an
-  example lives in `references/worked-example.md`; other files reference it
-  rather than re-telling it.
+- **Reusable traps** go in `references/gotchas.md`. State each fact in one file;
+  other files link to it.
 - Prefer verifying client specifics against the actual repo — file paths and CI
   rules drift, so the skill says "read the workflow/source" rather than freezing
   exact details that go stale.

@@ -78,6 +78,24 @@ and historical state before interpreting a missing result.
 To survey raw client responses at these blocks, see
 [hive.md](hive.md#survey-raw-client-behavior-no-expected-value-needed).
 
+## A post-merge-only chain for a client that cannot import early forks
+
+Some clients do not support pre-merge blocks. On the standard chain such a
+client stays at genesis and fails most fixtures. To test its RPC behavior,
+generate a chain that is post-merge from genesis:
+
+```sh
+mkdir -p /tmp/poschain
+./hivechain generate -outdir /tmp/poschain -pos -fork-interval 0 -lastfork <fork> \
+    -length <n> -tx-count 4 -tx-interval 1 \
+    -outputs genesis,chain,forkenv,headstate,txinfo,accounts,headfcu
+```
+
+The output directory must exist. Fixtures from the standard chain are not valid
+on this chain. Fill a separate fixture set against it and run that set from a
+simulator copy (see [hive.md](hive.md#run-against-local-or-unmerged-fixtures)).
+Do not commit this chain or its fixtures.
+
 ## Bumping the chain to a new fork — the recipe
 
 1. **hivechain (hive repo):** a new fork needs BOTH ends:

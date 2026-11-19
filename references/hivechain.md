@@ -56,7 +56,7 @@ The amsterdam example uses a three-block interval and has its head at block 60:
 | fork | activates at block | pre-fork range |
 |---|---|---|
 | eip150 / eip155+158 | 3 / 6 | 0-2 / 3-5 |
-| byzantium / constantinople / petersburg | 9 / 12 / 15 | |
+| byzantium / constantinople / petersburg | 9 / 12 / 15 | do not target 12-14 (see below) |
 | istanbul / muirGlacier | 18 / 21 | |
 | **berlin** (EIP-2929/2930) | **24** | **6-23** (EIP-155 active, so signatures validate) |
 | london | 27 | 24-26 |
@@ -74,6 +74,18 @@ contracts (e.g. the storage contract at `0x7dcd17433742f4c0ca53122ab541d0ba67fc2
 called with input `0x010203040506`) and `accounts.json` senders exist at every
 block, so no tx-mod lookup is needed. Verify the selected client's imported head
 and historical state before interpreting a missing result.
+
+Do not target a block at or after Constantinople and before Petersburg. Check
+`constantinopleBlock` and `petersburgBlock` in `genesis.json`: a chain with a
+nonzero `-fork-interval` can put the two forks at different blocks. Mainnet
+activated them at one block, and the execution specs (EELS and EEST) model only
+that schedule: one Constantinople fork without EIP-1283. The blocks between the
+forks follow EIP-1283 under EIP-1013, and a few networks, such as Gnosis Chain,
+have such blocks. But EELS does not model them, so no reference gives expected
+values there, and clients that follow mainnet differ. At least one client runs
+them under Byzantium EVM rules and does not treat this as a bug. To test a
+Constantinople change, use the last block before Constantinople and the first
+Petersburg block.
 
 To survey raw client responses at these blocks, see
 [hive.md](hive.md#survey-raw-client-behavior-no-expected-value-needed).

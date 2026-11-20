@@ -172,4 +172,5 @@ not "the client is wrong".
 Before a PR, read each affected repository's current contribution rules and CI
 configuration. Check the diff for unrelated fixture drift and local overrides.
 If the spec depends on an unreleased client change, describe that dependency
-instead of claiming the pinned-client CI passes.
+instead of claiming the pinned-client CI passes. Before a spec change merges, check
+[merge readiness](references/execution-apis.md#merge-readiness).

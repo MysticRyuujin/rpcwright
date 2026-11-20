@@ -188,3 +188,12 @@ rm "$negative_spec"
   fixtures.
 - **Not** `openrpc.json` / `refs-openrpc.json` (artifacts), and **not** the
   `tools/go.mod` local `replace` (see `testgen.md`).
+
+## Merge readiness
+
+A spec change that adds or changes fixtures generally merges only when at least
+three clients pass those fixtures in Hive. A change that only the reference
+client (geth) passes is not ready, even when issues for the other clients are
+filed. In the PR, report the Hive result for each client. Name the client fixes
+that the PR needs to reach three passing clients, and open or offer those
+fixes.

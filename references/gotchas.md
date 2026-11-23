@@ -196,8 +196,9 @@ at its package path does not, so the failure can follow the runtime choice.
   path of the runtime binary. Compare with other runners and with the
   client's own Hive CI.
 - .NET `createdump` can fail with `open(/proc/<pid>/mem) FAILED Permission
-  denied`, because the same peer rule covers ptrace. Do not claim a crash stack
-  that you did not capture.
+  denied`. For a stack, set the host `kernel.core_pattern` to a file path, run
+  the container with `--ulimit core=-1`, and read the core with gdb in the same
+  image. Do not claim a crash stack that you did not capture.
 
 Fix the environment: install the runtime at the path that its distribution
 profile attaches to, or use a container engine whose default profile allows

@@ -295,6 +295,8 @@ run still "finishes." Confirm each client's `client launch` passed and ran its e
 sub-tests. To see *why* it died, re-run with **`--docker.output`** (streams container
 stdout/stderr). Beware stale logs: `ls -t workspace/logs/<client>/*.log` can return a
 *previous* run's file — check its timestamp.
+If the client log ends with a segfault or a JVM crash report, see
+[gotchas.md](gotchas.md#15-a-client-crashes-at-random-in-one-ci-environment-only).
 
 ## Survey raw client behavior (no expected value needed)
 

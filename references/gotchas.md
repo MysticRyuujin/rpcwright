@@ -170,24 +170,36 @@ stdout.
 Read the end of the client log before you triage individual cases. One crash
 fails every case that runs after it.
 
-The OCI runtime and the host kernel can cause this. The JVM and .NET suspend
-threads with signals. On some kernel and runtime pairs, for example crun on
-some GitHub-hosted Ubuntu images, this fails at random. Clients without a
-managed runtime do not show the crash in the same jobs.
+Check AppArmor first. On hosts with
+`kernel.apparmor_restrict_unprivileged_unconfined=1`, such as recent Ubuntu,
+the kernel converts the container runtime's profile change into a stack when
+the runtime itself runs as plain `unconfined`. The container label becomes
+`docker-default//&unconfined`. A `docker-default` profile that allows signals
+only to `peer=docker-default` then denies signals between the container's own
+processes and threads. The JVM and .NET suspend threads with signals, and a
+denied `SIGABRT` turns an abort into a segfault. Clients without a managed
+runtime can pass the same jobs.
 
-- Record the runner image, the kernel, and the Docker default runtime
-  (`docker info --format '{{.DefaultRuntime}}'`) for each run.
-- Compare the same client image on other runners and in the client's own Hive
-  CI. A pattern that follows the runner type points to the environment.
-- Count crashes over many client starts. A rare crash can pass several runs.
-- Reproduce on the same runner image with runc and with the other runtime in
-  one workflow. A host with a different kernel can fail to reproduce it.
-- For .NET, `DOTNET_INTERNAL_ThreadSuspendInjection=0` is a diagnostic. If the
-  crashes stop, signal-based thread suspension is involved. For the JVM,
-  `-XX:-FlightRecorder` removes one source of these signals.
-- .NET `createdump` can fail in the container with `open(/proc/<pid>/mem)
-  FAILED Permission denied`, also with `SYS_PTRACE`. Then the A/B counts are
-  the only evidence. Do not claim a crash stack that you did not capture.
+The distribution attaches its `runc` and `crun` profiles by path, for example
+`/usr/bin/crun`. A runtime binary at another path, such as
+`/usr/local/bin/crun`, runs as plain `unconfined` and triggers the stack. runc
+at its package path does not, so the failure can follow the runtime choice.
 
-Fix the environment, for example use runc on the affected runners. Do not
-report a client bug until the crash reproduces under runc.
+- In the container, read `/proc/1/attr/current`. A label that contains
+  `//&unconfined` confirms the stack.
+- On the host, `dmesg | grep -E 'converted to stacking|operation="signal"'`
+  shows the conversion and the denied signals.
+- Count crashes over many client starts, with and without
+  `--security-opt apparmor=unconfined`. If the crashes stop, AppArmor is the
+  cause. A rare crash can pass several runs.
+- Record the runner image, the kernel, the Docker default runtime, and the
+  path of the runtime binary. Compare with other runners and with the
+  client's own Hive CI.
+- .NET `createdump` can fail with `open(/proc/<pid>/mem) FAILED Permission
+  denied`, because the same peer rule covers ptrace. Do not claim a crash stack
+  that you did not capture.
+
+Fix the environment: install the runtime at the path that its distribution
+profile attaches to, or use a container engine whose default profile allows
+the stacked peer. Do not report a client bug until the crash reproduces with
+the plain `docker-default` label.
